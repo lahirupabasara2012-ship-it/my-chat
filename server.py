@@ -11,7 +11,10 @@ app.secret_key = "mychat-secret-key-change-this"
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*"
+    cors_allowed_origins="*",
+    async_mode="threading",
+    logger=True,
+    engineio_logger=True
 )
 
 DATABASE = "mychat.db"
