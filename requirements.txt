@@ -3,6 +3,4 @@ Flask-SocketIO
 Werkzeug
 simple-websocket
 gunicorn
-gevent
-gevent-websocket
 psycopg2-binary
