@@ -3,12 +3,22 @@ from flask_socketio import SocketIO, emit, join_room
 import psycopg2
 import psycopg2.extras
 import os
+import uuid
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+
+# =========================================================
+# APP
+# =========================================================
+
 app = Flask(__name__)
 
-app.secret_key = "mychat-secret-key-change-this"
+app.secret_key = os.environ.get(
+    "SECRET_KEY",
+    "change-this-secret-key"
+)
 
 socketio = SocketIO(
     app,
@@ -18,60 +28,62 @@ socketio = SocketIO(
     engineio_logger=True
 )
 
-DATABASE = os.environ.get("postgresql://mychat:s59yZ1tHTFAWvwG48aQYIFdC3qUopUnd@dpg-da2tf56gekts73bl3u6g-a/mychat_z1an")
-
-UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
-
-ALLOWED_EXTENSIONS = {
-    "png", "jpg", "jpeg", "gif", "webp",
-    "mp4", "webm", "mov", "avi",
-    "pdf", "txt", "zip", "rar",
-    "doc", "docx", "xls", "xlsx"
-}
-
-MAX_FILE_SIZE = 100 * 1024 * 1024
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 
 # =========================================================
 # DATABASE
 # =========================================================
 
+DATABASE_URL = os.environ.get("postgresql://mychat:s59yZ1tHTFAWvwG48aQYIFdC3qUopUnd@dpg-da2tf56gekts73bl3u6g-a/mychat_z1an")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set."
+    )
+
+
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+
+    conn = psycopg2.connect(
+        DATABASE_URL
+    )
+
     return conn
 
+
+# =========================================================
+# INITIALIZE DATABASE
+# =========================================================
 
 def init_db():
 
     conn = get_db()
 
-    conn.execute("""
+    cur = conn.cursor()
+
+    # USERS
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL
         )
     """)
 
-    conn.execute("""
+    # CONTACTS
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             contact_id INTEGER NOT NULL,
             UNIQUE(user_id, contact_id)
         )
     """)
 
-    conn.execute("""
+    # MESSAGES
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             sender_id INTEGER NOT NULL,
             receiver_id INTEGER NOT NULL,
             message TEXT,
@@ -85,35 +97,10 @@ def init_db():
 
     conn.commit()
 
-    # For old databases
-    columns = conn.execute(
-        "PRAGMA table_info(messages)"
-    ).fetchall()
-
-    column_names = [row["name"] for row in columns]
-
-    if "message_type" not in column_names:
-        conn.execute(
-            "ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT 'text'"
-        )
-
-    if "file_name" not in column_names:
-        conn.execute(
-            "ALTER TABLE messages ADD COLUMN file_name TEXT"
-        )
-
-    if "file_url" not in column_names:
-        conn.execute(
-            "ALTER TABLE messages ADD COLUMN file_url TEXT"
-        )
-
-    if "is_read" not in column_names:
-        conn.execute(
-            "ALTER TABLE messages ADD COLUMN is_read INTEGER DEFAULT 0"
-        )
-
-    conn.commit()
+    cur.close()
     conn.close()
+
+    print("PostgreSQL database initialized successfully.")
 
 
 # =========================================================
@@ -125,16 +112,75 @@ def allowed_file(filename):
     if "." not in filename:
         return False
 
-    extension = filename.rsplit(".", 1)[1].lower()
+    extension = filename.rsplit(
+        ".",
+        1
+    )[1].lower()
 
     return extension in ALLOWED_EXTENSIONS
 
+
+def row_to_dict(row):
+
+    if not row:
+        return None
+
+    return dict(row)
+
+
+# =========================================================
+# FILE SETTINGS
+# =========================================================
+
+UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
+
+ALLOWED_EXTENSIONS = {
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+
+    "mp4",
+    "webm",
+    "mov",
+    "avi",
+
+    "pdf",
+    "txt",
+    "zip",
+    "rar",
+
+    "doc",
+    "docx",
+    "xls",
+    "xlsx"
+}
+
+MAX_FILE_SIZE = 100 * 1024 * 1024
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
+
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
+
+
+# =========================================================
+# GET MESSAGE
+# =========================================================
 
 def get_message(message_id):
 
     conn = get_db()
 
-    row = conn.execute("""
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
+    cur.execute("""
         SELECT
             id,
             sender_id,
@@ -146,16 +192,22 @@ def get_message(message_id):
             created_at,
             is_read
         FROM messages
-        WHERE id = ?
-    """, (message_id,)).fetchone()
+        WHERE id = %s
+    """, (
+        message_id,
+    ))
 
+    row = cur.fetchone()
+
+    cur.close()
     conn.close()
 
-    if not row:
-        return None
+    return row_to_dict(row)
 
-    return dict(row)
 
+# =========================================================
+# SAVE MESSAGE
+# =========================================================
 
 def save_message(
     sender_id,
@@ -168,7 +220,11 @@ def save_message(
 
     conn = get_db()
 
-    cursor = conn.execute("""
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
+    cur.execute("""
         INSERT INTO messages
         (
             sender_id,
@@ -179,7 +235,8 @@ def save_message(
             file_url,
             is_read
         )
-        VALUES (?, ?, ?, ?, ?, ?, 0)
+        VALUES (%s, %s, %s, %s, %s, %s, 0)
+        RETURNING id
     """, (
         sender_id,
         receiver_id,
@@ -189,9 +246,11 @@ def save_message(
         file_url
     ))
 
-    message_id = cursor.lastrowid
+    message_id = cur.fetchone()["id"]
 
     conn.commit()
+
+    cur.close()
     conn.close()
 
     return get_message(message_id)
@@ -203,12 +262,20 @@ def save_message(
 
 @app.route("/")
 def home():
-    return send_from_directory(".", "index.html")
+
+    return send_from_directory(
+        ".",
+        "index.html"
+    )
 
 
 @app.route("/style.css")
 def css():
-    return send_from_directory(".", "style.css")
+
+    return send_from_directory(
+        ".",
+        "style.css"
+    )
 
 
 # =========================================================
@@ -217,6 +284,7 @@ def css():
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
+
     return send_from_directory(
         app.config["UPLOAD_FOLDER"],
         filename
@@ -227,22 +295,38 @@ def uploaded_file(filename):
 # SIGN UP
 # =========================================================
 
-@app.route("/api/signup", methods=["POST"])
+@app.route(
+    "/api/signup",
+    methods=["POST"]
+)
 def signup():
 
     data = request.get_json() or {}
 
-    name = data.get("name", "").strip()
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
+    name = data.get(
+        "name",
+        ""
+    ).strip()
+
+    email = data.get(
+        "email",
+        ""
+    ).strip().lower()
+
+    password = data.get(
+        "password",
+        ""
+    )
 
     if not name or not email or not password:
+
         return jsonify({
             "success": False,
             "message": "All fields are required."
         })
 
     if len(password) < 6:
+
         return jsonify({
             "success": False,
             "message": "Password must be at least 6 characters."
@@ -250,13 +334,24 @@ def signup():
 
     conn = get_db()
 
-    existing = conn.execute(
-        "SELECT id FROM users WHERE email = ?",
-        (email,)
-    ).fetchone()
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
+    # Check existing user
+    cur.execute("""
+        SELECT id
+        FROM users
+        WHERE email = %s
+    """, (
+        email,
+    ))
+
+    existing = cur.fetchone()
 
     if existing:
 
+        cur.close()
         conn.close()
 
         return jsonify({
@@ -264,24 +359,40 @@ def signup():
             "message": "This email is already registered."
         })
 
-    hashed_password = generate_password_hash(password)
+    hashed_password = generate_password_hash(
+        password
+    )
 
-    conn.execute("""
+    cur.execute("""
         INSERT INTO users
-        (name, email, password)
-        VALUES (?, ?, ?)
+        (
+            name,
+            email,
+            password
+        )
+        VALUES (%s, %s, %s)
+        RETURNING id
     """, (
         name,
         email,
         hashed_password
     ))
 
+    user_id = cur.fetchone()["id"]
+
     conn.commit()
+
+    cur.close()
     conn.close()
 
     return jsonify({
         "success": True,
-        "message": "Account created successfully."
+        "message": "Account created successfully.",
+        "user": {
+            "id": user_id,
+            "name": name,
+            "email": email
+        }
     })
 
 
@@ -289,21 +400,45 @@ def signup():
 # LOGIN
 # =========================================================
 
-@app.route("/api/login", methods=["POST"])
+@app.route(
+    "/api/login",
+    methods=["POST"]
+)
 def login():
 
     data = request.get_json() or {}
 
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
+    email = data.get(
+        "email",
+        ""
+    ).strip().lower()
+
+    password = data.get(
+        "password",
+        ""
+    )
 
     conn = get_db()
 
-    user = conn.execute(
-        "SELECT * FROM users WHERE email = ?",
-        (email,)
-    ).fetchone()
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
 
+    cur.execute("""
+        SELECT
+            id,
+            name,
+            email,
+            password
+        FROM users
+        WHERE email = %s
+    """, (
+        email,
+    ))
+
+    user = cur.fetchone()
+
+    cur.close()
     conn.close()
 
     if not user:
@@ -342,21 +477,36 @@ def login():
 @app.route("/api/me")
 def current_user():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
+
         return jsonify({
             "logged_in": False
         })
 
     conn = get_db()
 
-    user = conn.execute("""
-        SELECT id, name, email
-        FROM users
-        WHERE id = ?
-    """, (user_id,)).fetchone()
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
 
+    cur.execute("""
+        SELECT
+            id,
+            name,
+            email
+        FROM users
+        WHERE id = %s
+    """, (
+        user_id,
+    ))
+
+    user = cur.fetchone()
+
+    cur.close()
     conn.close()
 
     if not user:
@@ -381,7 +531,10 @@ def current_user():
 # LOGOUT
 # =========================================================
 
-@app.route("/api/logout", methods=["POST"])
+@app.route(
+    "/api/logout",
+    methods=["POST"]
+)
 def logout():
 
     session.clear()
@@ -395,10 +548,15 @@ def logout():
 # ADD CONTACT
 # =========================================================
 
-@app.route("/api/add-contact", methods=["POST"])
+@app.route(
+    "/api/add-contact",
+    methods=["POST"]
+)
 def add_contact():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
 
@@ -423,14 +581,26 @@ def add_contact():
 
     conn = get_db()
 
-    contact = conn.execute("""
-        SELECT id, name, email
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
+    cur.execute("""
+        SELECT
+            id,
+            name,
+            email
         FROM users
-        WHERE email = ?
-    """, (email,)).fetchone()
+        WHERE email = %s
+    """, (
+        email,
+    ))
+
+    contact = cur.fetchone()
 
     if not contact:
 
+        cur.close()
         conn.close()
 
         return jsonify({
@@ -440,6 +610,7 @@ def add_contact():
 
     if contact["id"] == user_id:
 
+        cur.close()
         conn.close()
 
         return jsonify({
@@ -447,18 +618,21 @@ def add_contact():
             "message": "You cannot add yourself."
         })
 
-    already = conn.execute("""
+    cur.execute("""
         SELECT id
         FROM contacts
-        WHERE user_id = ?
-        AND contact_id = ?
+        WHERE user_id = %s
+        AND contact_id = %s
     """, (
         user_id,
         contact["id"]
-    )).fetchone()
+    ))
+
+    already = cur.fetchone()
 
     if already:
 
+        cur.close()
         conn.close()
 
         return jsonify({
@@ -466,16 +640,21 @@ def add_contact():
             "message": "This contact is already added."
         })
 
-    conn.execute("""
+    cur.execute("""
         INSERT INTO contacts
-        (user_id, contact_id)
-        VALUES (?, ?)
+        (
+            user_id,
+            contact_id
+        )
+        VALUES (%s, %s)
     """, (
         user_id,
         contact["id"]
     ))
 
     conn.commit()
+
+    cur.close()
     conn.close()
 
     return jsonify({
@@ -495,7 +674,9 @@ def add_contact():
 @app.route("/api/contacts")
 def get_contacts():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
 
@@ -505,7 +686,11 @@ def get_contacts():
 
     conn = get_db()
 
-    contacts = conn.execute("""
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
+    cur.execute("""
         SELECT
             users.id,
             users.name,
@@ -513,35 +698,41 @@ def get_contacts():
         FROM contacts
         JOIN users
         ON users.id = contacts.contact_id
-        WHERE contacts.user_id = ?
+        WHERE contacts.user_id = %s
         ORDER BY users.name
-    """, (user_id,)).fetchall()
+    """, (
+        user_id,
+    ))
+
+    contacts = cur.fetchall()
 
     result = []
 
     for contact in contacts:
 
-        unread = conn.execute("""
+        cur.execute("""
             SELECT COUNT(*) AS count
             FROM messages
-            WHERE sender_id = ?
-            AND receiver_id = ?
+            WHERE sender_id = %s
+            AND receiver_id = %s
             AND is_read = 0
         """, (
             contact["id"],
             user_id
-        )).fetchone()["count"]
+        ))
 
-        last_message = conn.execute("""
+        unread = cur.fetchone()["count"]
+
+        cur.execute("""
             SELECT
                 message,
                 message_type,
                 file_name
             FROM messages
             WHERE
-            (sender_id = ? AND receiver_id = ?)
+            (sender_id = %s AND receiver_id = %s)
             OR
-            (sender_id = ? AND receiver_id = ?)
+            (sender_id = %s AND receiver_id = %s)
             ORDER BY id DESC
             LIMIT 1
         """, (
@@ -549,25 +740,31 @@ def get_contacts():
             contact["id"],
             contact["id"],
             user_id
-        )).fetchone()
+        ))
+
+        last_message = cur.fetchone()
 
         preview = ""
 
         if last_message:
 
             if last_message["message_type"] == "image":
-                preview = "?? Photo"
+                preview = "📷 Photo"
 
             elif last_message["message_type"] == "video":
-                preview = "?? Video"
+                preview = "🎥 Video"
 
             elif last_message["message_type"] == "file":
-                preview = "?? " + (
-                    last_message["file_name"] or "File"
+                preview = "📎 " + (
+                    last_message["file_name"]
+                    or "File"
                 )
 
             else:
-                preview = last_message["message"] or ""
+                preview = (
+                    last_message["message"]
+                    or ""
+                )
 
         result.append({
             "id": contact["id"],
@@ -577,6 +774,7 @@ def get_contacts():
             "last_message": preview
         })
 
+    cur.close()
     conn.close()
 
     return jsonify({
@@ -589,10 +787,14 @@ def get_contacts():
 # GET MESSAGES
 # =========================================================
 
-@app.route("/api/messages/<int:contact_id>")
+@app.route(
+    "/api/messages/<int:contact_id>"
+)
 def get_messages(contact_id):
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
 
@@ -602,21 +804,23 @@ def get_messages(contact_id):
 
     conn = get_db()
 
+    cur = conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+
     # Mark received messages as read
-    conn.execute("""
+    cur.execute("""
         UPDATE messages
         SET is_read = 1
-        WHERE sender_id = ?
-        AND receiver_id = ?
+        WHERE sender_id = %s
+        AND receiver_id = %s
         AND is_read = 0
     """, (
         contact_id,
         user_id
     ))
 
-    conn.commit()
-
-    messages = conn.execute("""
+    cur.execute("""
         SELECT
             id,
             sender_id,
@@ -629,17 +833,22 @@ def get_messages(contact_id):
             is_read
         FROM messages
         WHERE
-        (sender_id = ? AND receiver_id = ?)
+        (sender_id = %s AND receiver_id = %s)
         OR
-        (sender_id = ? AND receiver_id = ?)
+        (sender_id = %s AND receiver_id = %s)
         ORDER BY id ASC
     """, (
         user_id,
         contact_id,
         contact_id,
         user_id
-    )).fetchall()
+    ))
 
+    messages = cur.fetchall()
+
+    conn.commit()
+
+    cur.close()
     conn.close()
 
     result = []
@@ -654,7 +863,7 @@ def get_messages(contact_id):
             "message_type": msg["message_type"],
             "file_name": msg["file_name"],
             "file_url": msg["file_url"],
-            "created_at": msg["created_at"],
+            "created_at": str(msg["created_at"]),
             "is_read": msg["is_read"]
         })
 
@@ -665,37 +874,58 @@ def get_messages(contact_id):
 
 
 # =========================================================
-# SEND TEXT MESSAGE - SOCKET.IO
+# SEND TEXT MESSAGE
 # =========================================================
 
 @socketio.on("send_message")
 def socket_send_message(data):
 
-    print("========== SEND MESSAGE ==========")
-    print("Session user:", session.get("user_id"))
-    print("Received data:", data)
+    print(
+        "========== SEND MESSAGE =========="
+    )
 
-    sender_id = session.get("user_id")
+    sender_id = session.get(
+        "user_id"
+    )
+
+    print(
+        "Session user:",
+        sender_id
+    )
 
     if not sender_id:
-        print("ERROR: User is not logged in to Socket.IO")
+
+        print(
+            "ERROR: User is not logged in"
+        )
+
         return
 
     try:
-        receiver_id = int(data.get("receiver_id"))
+
+        receiver_id = int(
+            data.get("receiver_id")
+        )
+
     except Exception as e:
-        print("ERROR: Invalid receiver ID:", e)
+
+        print(
+            "ERROR: Invalid receiver:",
+            e
+        )
+
         return
 
-    message = str(data.get("message", "")).strip()
+    message = str(
+        data.get(
+            "message",
+            ""
+        )
+    ).strip()
 
     if not receiver_id or not message:
-        print("ERROR: Empty receiver/message")
-        return
 
-    print("Sender:", sender_id)
-    print("Receiver:", receiver_id)
-    print("Message:", message)
+        return
 
     try:
 
@@ -706,34 +936,44 @@ def socket_send_message(data):
             "text"
         )
 
-        print("Message saved:", saved)
-
+        # Receiver
         socketio.emit(
             "new_message",
             saved,
             room="user_" + str(receiver_id)
         )
 
+        # Sender
         emit(
             "message_sent",
             saved
         )
 
-        print("Message sent successfully!")
+        print(
+            "Message sent successfully!"
+        )
 
     except Exception as e:
 
-        print("SEND ERROR:", repr(e))
+        print(
+            "SEND ERROR:",
+            repr(e)
+        )
 
 
 # =========================================================
 # UPLOAD FILE
 # =========================================================
 
-@app.route("/api/upload", methods=["POST"])
+@app.route(
+    "/api/upload",
+    methods=["POST"]
+)
 def upload_file():
 
-    sender_id = session.get("user_id")
+    sender_id = session.get(
+        "user_id"
+    )
 
     if not sender_id:
 
@@ -742,7 +982,9 @@ def upload_file():
             "message": "Please login first."
         })
 
-    receiver_id = request.form.get("receiver_id")
+    receiver_id = request.form.get(
+        "receiver_id"
+    )
 
     if not receiver_id:
 
@@ -752,8 +994,12 @@ def upload_file():
         })
 
     try:
-        receiver_id = int(receiver_id)
-    except:
+
+        receiver_id = int(
+            receiver_id
+        )
+
+    except Exception:
 
         return jsonify({
             "success": False,
@@ -776,59 +1022,84 @@ def upload_file():
             "message": "No file selected."
         })
 
-    if not allowed_file(file.filename):
+    if not allowed_file(
+        file.filename
+    ):
 
         return jsonify({
             "success": False,
             "message": "This file type is not allowed."
         })
 
-    original_name = secure_filename(file.filename)
+    original_name = secure_filename(
+        file.filename
+    )
 
     extension = ""
 
     if "." in original_name:
-        extension = "." + original_name.rsplit(".", 1)[1].lower()
+
+        extension = (
+            "."
+            + original_name.rsplit(
+                ".",
+                1
+            )[1].lower()
+        )
 
     unique_name = (
         str(sender_id)
         + "_"
-        + str(int(os.path.getmtime(__file__) * 1000000))
-        + "_"
-        + original_name
+        + uuid.uuid4().hex
+        + extension
     )
-
-    # Prevent accidental same filename
-    unique_name = secure_filename(unique_name)
 
     save_path = os.path.join(
         UPLOAD_FOLDER,
         unique_name
     )
 
-    file.save(save_path)
+    file.save(
+        save_path
+    )
 
     # Determine type
     image_extensions = {
-        "png", "jpg", "jpeg", "gif", "webp"
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp"
     }
 
     video_extensions = {
-        "mp4", "webm", "mov", "avi"
+        "mp4",
+        "webm",
+        "mov",
+        "avi"
     }
 
-    ext = extension.replace(".", "").lower()
+    ext = extension.replace(
+        ".",
+        ""
+    ).lower()
 
     if ext in image_extensions:
+
         message_type = "image"
 
     elif ext in video_extensions:
+
         message_type = "video"
 
     else:
+
         message_type = "file"
 
-    file_url = "/uploads/" + unique_name
+    file_url = (
+        "/uploads/"
+        + unique_name
+    )
 
     saved = save_message(
         sender_id,
@@ -839,19 +1110,19 @@ def upload_file():
         file_url
     )
 
-    # Send to receiver
+    # Receiver
     socketio.emit(
         "new_message",
         saved,
         room="user_" + str(receiver_id)
     )
 
-    # Send back to sender
+    # Sender
     socketio.emit(
         "message_sent",
         saved,
         room="user_" + str(sender_id)
-)
+    )
 
     return jsonify({
         "success": True,
@@ -869,7 +1140,9 @@ def upload_file():
 )
 def mark_read(contact_id):
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
 
@@ -879,11 +1152,13 @@ def mark_read(contact_id):
 
     conn = get_db()
 
-    conn.execute("""
+    cur = conn.cursor()
+
+    cur.execute("""
         UPDATE messages
         SET is_read = 1
-        WHERE sender_id = ?
-        AND receiver_id = ?
+        WHERE sender_id = %s
+        AND receiver_id = %s
         AND is_read = 0
     """, (
         contact_id,
@@ -891,6 +1166,8 @@ def mark_read(contact_id):
     ))
 
     conn.commit()
+
+    cur.close()
     conn.close()
 
     return jsonify({
@@ -905,7 +1182,9 @@ def mark_read(contact_id):
 @socketio.on("connect")
 def socket_connect():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if user_id:
 
@@ -918,6 +1197,12 @@ def socket_connect():
             user_id
         )
 
+    else:
+
+        print(
+            "Socket connected without login"
+        )
+
 
 # =========================================================
 # INITIALIZE DATABASE
@@ -927,7 +1212,7 @@ init_db()
 
 
 # =========================================================
-# START
+# START LOCAL SERVER
 # =========================================================
 
 if __name__ == "__main__":
@@ -935,19 +1220,40 @@ if __name__ == "__main__":
     print("=" * 50)
     print("                  MyChat")
     print("=" * 50)
+
     print("")
-    print("Server: http://127.0.0.1:8000")
+    print(
+        "Server: http://127.0.0.1:8000"
+    )
+
     print("")
-    print("Real-time chat enabled!")
-    print("File uploads enabled!")
-    print("Maximum file size: 100 MB")
+    print(
+        "Real-time chat enabled!"
+    )
+
+    print(
+        "File uploads enabled!"
+    )
+
+    print(
+        "Maximum file size: 100 MB"
+    )
+
     print("")
-    print("Press CTRL+C to stop.")
+    print(
+        "Press CTRL+C to stop."
+    )
+
     print("=" * 50)
 
     socketio.run(
         app,
-        host="127.0.0.1",
-        port=8000,
+        host="0.0.0.0",
+        port=int(
+            os.environ.get(
+                "PORT",
+                8000
+            )
+        ),
         debug=False
     )
