@@ -17,9 +17,9 @@ socketio = SocketIO(
     engineio_logger=True
 )
 
-DATABASE = "mychat.db"
+DATABASE = "/opt/render/project/src/data/mychat.db"
 
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
 
 ALLOWED_EXTENSIONS = {
     "png", "jpg", "jpeg", "gif", "webp",
