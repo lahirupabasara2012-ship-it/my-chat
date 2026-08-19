@@ -1,0 +1,615 @@
+/* =========================================
+   MyChat - Complete Style
+========================================= */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f0f2f5;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* =========================================
+   AUTH PAGE
+========================================= */
+
+.auth-page {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #128c7e, #25d366);
+}
+
+.auth-box {
+    width: 380px;
+    max-width: 92%;
+    background: white;
+    padding: 35px;
+    border-radius: 18px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.18);
+}
+
+.auth-box h1 {
+    text-align: center;
+    color: #128c7e;
+    font-size: 32px;
+    margin-bottom: 5px;
+}
+
+.auth-subtitle {
+    text-align: center;
+    color: #777;
+    margin-bottom: 25px;
+}
+
+.auth-box h2 {
+    margin-bottom: 18px;
+    color: #333;
+}
+
+.auth-box input {
+    width: 100%;
+    padding: 13px;
+    margin-bottom: 12px;
+    border: 1px solid #ddd;
+    border-radius: 9px;
+    font-size: 14px;
+    outline: none;
+}
+
+.auth-box input:focus {
+    border-color: #25d366;
+}
+
+.auth-box button {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 9px;
+    background: #128c7e;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.auth-box button:hover {
+    background: #0d7569;
+}
+
+.switch-text {
+    text-align: center;
+    margin-top: 18px;
+    color: #777;
+    font-size: 14px;
+}
+
+.switch-text span {
+    color: #128c7e;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* =========================================
+   MAIN APP
+========================================= */
+
+.app {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    background: white;
+}
+
+/* =========================================
+   SIDEBAR
+========================================= */
+
+.sidebar {
+    width: 330px;
+    min-width: 330px;
+    height: 100vh;
+    border-right: 1px solid #ddd;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header {
+    height: 65px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    background: #128c7e;
+    color: white;
+}
+
+.sidebar-header h1 {
+    font-size: 23px;
+}
+
+.profile-btn {
+    width: 38px !important;
+    height: 38px;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    background: rgba(255,255,255,0.2) !important;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.profile-btn:hover {
+    background: rgba(255,255,255,0.3) !important;
+}
+
+/* =========================================
+   SEARCH
+========================================= */
+
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px;
+    padding: 9px 12px;
+    background: #f0f2f5;
+    border-radius: 9px;
+}
+
+.search-box span {
+    font-size: 15px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    background: transparent;
+    width: 100%;
+    font-size: 14px;
+}
+
+/* =========================================
+   ADD CONTACT
+========================================= */
+
+.add-contact-btn {
+    margin: 0 12px 12px;
+    padding: 11px;
+    border: none;
+    border-radius: 8px;
+    background: #25d366;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.add-contact-btn:hover {
+    background: #1db954;
+}
+
+/* =========================================
+   CONTACTS
+========================================= */
+
+.contacts {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.contact {
+    display: flex;
+    align-items: center;
+    min-height: 70px;
+    padding: 10px 13px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    position: relative;
+}
+
+.contact:hover {
+    background: #f5f5f5;
+}
+
+.contact-info {
+    flex: 1;
+    min-width: 0;
+    margin-left: 10px;
+}
+
+.contact-name {
+    font-weight: bold;
+    color: #222;
+    margin-bottom: 4px;
+}
+
+.last-message {
+    font-size: 12px;
+    color: #777;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* =========================================
+   AVATAR
+========================================= */
+
+.avatar {
+    width: 45px;
+    height: 45px;
+    min-width: 45px;
+    border-radius: 50%;
+    background: #128c7e;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+/* =========================================
+   UNREAD MESSAGE BADGE
+========================================= */
+
+.unread-badge {
+    min-width: 21px;
+    height: 21px;
+    padding: 0 6px;
+    border-radius: 50px;
+    background: #25d366;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 7px;
+}
+
+.contact-status {
+    font-size: 14px;
+    margin-left: 5px;
+}
+
+.contact-status.online {
+    color: #25d366;
+}
+
+/* =========================================
+   CHAT
+========================================= */
+
+.chat {
+    flex: 1;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #efeae2;
+}
+
+/* =========================================
+   CHAT HEADER
+========================================= */
+
+.chat-header {
+    height: 65px;
+    min-height: 65px;
+    background: #128c7e;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+}
+
+.chat-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-user .avatar {
+    width: 43px;
+    height: 43px;
+    min-width: 43px;
+    background: white;
+    color: #128c7e;
+}
+
+.chat-user h2 {
+    font-size: 17px;
+}
+
+.chat-user p {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 3px;
+}
+
+.menu-btn {
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+/* =========================================
+   MESSAGES
+========================================= */
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+/* =========================================
+   MESSAGE
+========================================= */
+
+.message {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+}
+
+.message.sent {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.message.received {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.bubble {
+    padding: 9px 12px;
+    border-radius: 9px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.message.sent .bubble {
+    background: #d9fdd3;
+}
+
+.message.received .bubble {
+    background: white;
+}
+
+.time {
+    font-size: 10px;
+    color: #777;
+    margin-top: 3px;
+    padding: 0 4px;
+}
+
+/* =========================================
+   FILE MESSAGE
+========================================= */
+
+.file-message {
+    max-width: 300px;
+}
+
+.file-message img {
+    max-width: 280px;
+    max-height: 280px;
+    border-radius: 8px;
+    display: block;
+    cursor: pointer;
+}
+
+.file-message video {
+    max-width: 280px;
+    max-height: 250px;
+    border-radius: 8px;
+    display: block;
+}
+
+.file-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(255,255,255,0.8);
+    border-radius: 8px;
+}
+
+.file-icon {
+    font-size: 25px;
+}
+
+.file-name {
+    font-size: 13px;
+    word-break: break-word;
+}
+
+/* =========================================
+   MESSAGE AREA
+========================================= */
+
+.message-area {
+    min-height: 65px;
+    padding: 10px 14px;
+    background: #f0f2f5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-area input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: white;
+    padding: 12px 15px;
+    border-radius: 22px;
+    font-size: 14px;
+}
+
+.message-area input:disabled {
+    background: #ddd;
+}
+
+.emoji-btn,
+.send-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.emoji-btn {
+    background: transparent;
+    font-size: 20px;
+}
+
+.send-btn {
+    background: #128c7e;
+    color: white;
+    font-size: 18px;
+}
+
+.send-btn:hover {
+    background: #0d7569;
+}
+
+.send-btn:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   MODAL
+========================================= */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-box {
+    width: 380px;
+    max-width: 90%;
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    position: relative;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+
+.modal-box h2 {
+    margin-bottom: 8px;
+}
+
+.modal-box p {
+    color: #777;
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+.modal-box input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    outline: none;
+    margin-bottom: 12px;
+}
+
+.confirm-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #128c7e;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-btn {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: none;
+    background: transparent;
+    font-size: 25px;
+    color: #777;
+    cursor: pointer;
+}
+
+/* =========================================
+   SCROLLBAR
+========================================= */
+
+::-webkit-scrollbar {
+    width: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #bbb;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 700px) {
+
+    .sidebar {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .chat {
+        display: none;
+    }
+
+    .sidebar.mobile-hidden {
+        display: none;
+    }
+
+    .message {
+        max-width: 85%;
+    }
+
+    .file-message img,
+    .file-message video {
+        max-width: 240px;
+    }
+}

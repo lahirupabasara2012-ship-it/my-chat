@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MyChat</title>
+
+    <link rel="stylesheet" href="/style.css">
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+</head>
+
+<body>
+
+<!-- =========================
+     AUTH PAGE
+========================= -->
+
+<div class="auth-page" id="authPage">
+
+    <div class="auth-box">
+
+        <h1>MyChat</h1>
+
+        <p class="auth-subtitle">
+            Simple private messaging
+        </p>
+
+        <!-- LOGIN -->
+
+        <div id="loginForm">
+
+            <h2>Welcome Back</h2>
+
+            <input
+                type="email"
+                id="loginEmail"
+                placeholder="Email address"
+            >
+
+            <input
+                type="password"
+                id="loginPassword"
+                placeholder="Password"
+            >
+
+            <button onclick="login()">
+                Login
+            </button>
+
+            <p class="switch-text">
+                Don't have an account?
+                <span onclick="showSignup()">Sign Up</span>
+            </p>
+
+        </div>
+
+        <!-- SIGNUP -->
+
+        <div id="signupForm" style="display:none;">
+
+            <h2>Create Account</h2>
+
+            <input
+                type="text"
+                id="signupName"
+                placeholder="Your name"
+            >
+
+            <input
+                type="email"
+                id="signupEmail"
+                placeholder="Email address"
+            >
+
+            <input
+                type="password"
+                id="signupPassword"
+                placeholder="Password"
+            >
+
+            <button onclick="signup()">
+                Create Account
+            </button>
+
+            <p class="switch-text">
+                Already have an account?
+                <span onclick="showLogin()">Login</span>
+            </p>
+
+        </div>
+
+        <p id="authMessage"></p>
+
+    </div>
+
+</div>
+
+
+<!-- =========================
+     CHAT APP
+========================= -->
+
+<div class="app" id="chatApp" style="display:none;">
+
+    <!-- SIDEBAR -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+
+            <h1>MyChat</h1>
+
+            <button
+                class="profile-btn"
+                onclick="logout()"
+                title="Logout"
+            >
+                Logout
+            </button>
+
+        </div>
+
+        <div class="current-user">
+            Logged in as:
+            <b id="currentUserName"></b>
+        </div>
+
+        <div class="search-box">
+
+            <input
+                type="text"
+                id="searchInput"
+                placeholder="Search contacts..."
+            >
+
+        </div>
+
+        <button
+            class="add-contact-btn"
+            id="addContactBtn"
+        >
+            Add Contact
+        </button>
+
+        <div
+            class="contacts"
+            id="contacts"
+        ></div>
+
+    </aside>
+
+
+    <!-- CHAT -->
+
+    <main class="chat">
+
+        <header class="chat-header">
+
+            <div class="chat-user">
+
+                <div
+                    class="avatar"
+                    id="chatAvatar"
+                >
+                    
+                </div>
+
+                <div>
+
+                    <h2 id="chatName">
+                        Select a contact
+                    </h2>
+
+                    <p id="chatStatus">
+                        
+                    </p>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- MESSAGES -->
+
+        <div
+            class="messages"
+            id="messages"
+        >
+
+            <div class="empty-chat">
+                Select a contact to start chatting
+            </div>
+
+        </div>
+
+
+        <!-- MESSAGE AREA -->
+
+        <div class="message-area">
+
+            <button
+                class="file-btn"
+                id="fileBtn"
+                title="Send file"
+                disabled
+            >
+                File
+            </button>
+
+            <input
+                type="file"
+                id="fileInput"
+                style="display:none;"
+                accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
+            >
+
+            <input
+                type="text"
+                id="messageInput"
+                placeholder="Type a message..."
+                disabled
+            >
+
+            <button
+                class="send-btn"
+                id="sendBtn"
+                disabled
+            >
+                Send
+            </button>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<!-- =========================
+     ADD CONTACT MODAL
+========================= -->
+
+<div
+    class="modal"
+    id="contactModal"
+>
+
+    <div class="modal-box">
+
+        <button
+            class="close-btn"
+            id="closeModal"
+        >
+            Close
+        </button>
+
+        <h2>Add Contact</h2>
+
+        <p>
+            Enter your friend's email address
+        </p>
+
+        <input
+            type="email"
+            id="emailInput"
+            placeholder="friend@example.com"
+        >
+
+        <button
+            class="confirm-btn"
+            id="confirmContact"
+        >
+            Add Contact
+        </button>
+
+        <p
+            id="contactMessage"
+            style="text-align:center;"
+        ></p>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* =====================================================
+   GLOBAL VARIABLES
+===================================================== */
+
+let currentUser = null;
+let selectedContact = null;
+let socket = null;
+
+
+/* =====================================================
+   SOCKET.IO
+===================================================== */
+
+function connectSocket() {
+
+    if (socket) {
+
+        try {
+            socket.disconnect();
+        } catch (e) {}
+
+    }
+
+    socket = io({
+        transports: ["polling", "websocket"]
+    });
+
+
+    socket.on("connect", function () {
+
+        console.log(
+            "Socket.IO connected:",
+            socket.id
+        );
+
+    });
+
+
+    socket.on("connect_error", function (error) {
+
+        console.error(
+            "Socket.IO connection error:",
+            error
+        );
+
+    });
+
+
+    socket.on("disconnect", function () {
+
+        console.log(
+            "Socket.IO disconnected"
+        );
+
+    });
+
+
+    /* =========================
+       MESSAGE SENT
+    ========================= */
+
+    socket.on(
+        "message_sent",
+        function(message) {
+
+            console.log(
+                "MESSAGE SENT:",
+                message
+            );
+
+            if (!message) {
+                return;
+            }
+
+            /*
+               Always show the message
+               in the currently selected chat.
+            */
+
+            if (
+                selectedContact &&
+                Number(selectedContact.id) ===
+                Number(message.receiver_id)
+            ) {
+
+                addMessageToScreen(message);
+
+            }
+
+        }
+    );
+
+
+    /* =========================
+       NEW MESSAGE
+    ========================= */
+
+    socket.on(
+        "new_message",
+        function(message) {
+
+            console.log(
+                "NEW MESSAGE:",
+                message
+            );
+
+            if (!message) {
+                return;
+            }
+
+
+            /*
+               If this conversation is open,
+               show the message immediately.
+            */
+
+            if (
+                selectedContact &&
+                Number(selectedContact.id) ===
+                Number(message.sender_id)
+            ) {
+
+                addMessageToScreen(message);
+
+                fetch(
+                    "/api/messages/" +
+                    message.sender_id +
+                    "/read",
+                    {
+                        method: "POST"
+                    }
+                );
+
+                return;
+
+            }
+
+
+            /*
+               Conversation isn't open.
+            */
+
+            loadContacts();
+
+            showNotification(
+                "New message received"
+            );
+
+        }
+    );
+
+
+    /* =========================
+       MESSAGES READ
+    ========================= */
+
+    socket.on(
+        "messages_read",
+        function() {
+
+            loadContacts();
+
+        }
+    );
+
+}
+
+
+/* =====================================================
+   AUTH UI
+===================================================== */
+
+function showLogin() {
+
+    document.getElementById(
+        "loginForm"
+    ).style.display = "block";
+
+    document.getElementById(
+        "signupForm"
+    ).style.display = "none";
+
+    document.getElementById(
+        "authMessage"
+    ).textContent = "";
+
+}
+
+
+function showSignup() {
+
+    document.getElementById(
+        "loginForm"
+    ).style.display = "none";
+
+    document.getElementById(
+        "signupForm"
+    ).style.display = "block";
+
+    document.getElementById(
+        "authMessage"
+    ).textContent = "";
+
+}
+
+
+function showAuthMessage(
+    message,
+    color
+) {
+
+    const element =
+        document.getElementById(
+            "authMessage"
+        );
+
+    element.textContent =
+        message;
+
+    element.style.color =
+        color;
+
+}
+
+
+/* =====================================================
+   SIGNUP
+===================================================== */
+
+async function signup() {
+
+    const name =
+        document.getElementById(
+            "signupName"
+        ).value.trim();
+
+    const email =
+        document.getElementById(
+            "signupEmail"
+        ).value.trim();
+
+    const password =
+        document.getElementById(
+            "signupPassword"
+        ).value;
+
+
+    if (!name || !email || !password) {
+
+        showAuthMessage(
+            "Please fill all fields.",
+            "red"
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/signup",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        name: name,
+                        email: email,
+                        password: password
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (data.success) {
+
+            showAuthMessage(
+                "Account created! You can login now.",
+                "green"
+            );
+
+            document.getElementById(
+                "signupName"
+            ).value = "";
+
+            document.getElementById(
+                "signupEmail"
+            ).value = "";
+
+            document.getElementById(
+                "signupPassword"
+            ).value = "";
+
+            setTimeout(
+                showLogin,
+                1000
+            );
+
+        } else {
+
+            showAuthMessage(
+                data.message,
+                "red"
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        showAuthMessage(
+            "Server connection error.",
+            "red"
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   LOGIN
+===================================================== */
+
+async function login() {
+
+    const email =
+        document.getElementById(
+            "loginEmail"
+        ).value.trim();
+
+    const password =
+        document.getElementById(
+            "loginPassword"
+        ).value;
+
+
+    if (!email || !password) {
+
+        showAuthMessage(
+            "Enter your email and password.",
+            "red"
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/login",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (data.success) {
+
+            currentUser =
+                data.user;
+
+
+            document.getElementById(
+                "authPage"
+            ).style.display = "none";
+
+            document.getElementById(
+                "chatApp"
+            ).style.display = "flex";
+
+
+            document.getElementById(
+                "currentUserName"
+            ).textContent =
+                currentUser.name;
+
+
+            /*
+               IMPORTANT:
+               Connect Socket.IO AFTER login.
+            */
+
+            connectSocket();
+
+
+            loadContacts();
+
+        } else {
+
+            showAuthMessage(
+                data.message,
+                "red"
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        showAuthMessage(
+            "Server connection error.",
+            "red"
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   CHECK LOGIN
+===================================================== */
+
+async function checkLogin() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/me"
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (data.logged_in) {
+
+            currentUser =
+                data.user;
+
+
+            document.getElementById(
+                "authPage"
+            ).style.display = "none";
+
+            document.getElementById(
+                "chatApp"
+            ).style.display = "flex";
+
+
+            document.getElementById(
+                "currentUserName"
+            ).textContent =
+                currentUser.name;
+
+
+            /*
+               IMPORTANT:
+               Connect Socket.IO only after
+               the login session is known.
+            */
+
+            connectSocket();
+
+
+            loadContacts();
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Server not available:",
+            error
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   LOGOUT
+===================================================== */
+
+async function logout() {
+
+    if (socket) {
+
+        socket.disconnect();
+
+        socket = null;
+
+    }
+
+
+    try {
+
+        await fetch(
+            "/api/logout",
+            {
+                method: "POST"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+    }
+
+
+    currentUser = null;
+    selectedContact = null;
+
+
+    document.getElementById(
+        "chatApp"
+    ).style.display = "none";
+
+
+    document.getElementById(
+        "authPage"
+    ).style.display = "flex";
+
+
+    document.getElementById(
+        "messageInput"
+    ).value = "";
+
+
+    document.getElementById(
+        "messageInput"
+    ).disabled = true;
+
+
+    document.getElementById(
+        "sendBtn"
+    ).disabled = true;
+
+
+    document.getElementById(
+        "fileBtn"
+    ).disabled = true;
+
+
+    showLogin();
+
+}
+
+
+/* =====================================================
+   LOAD CONTACTS
+===================================================== */
+
+async function loadContacts() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/contacts"
+            );
+
+
+        const data =
+            await response.json();
+
+
+        const container =
+            document.getElementById(
+                "contacts"
+            );
+
+
+        container.innerHTML = "";
+
+
+        if (!data.success) {
+            return;
+        }
+
+
+        if (data.contacts.length === 0) {
+
+            container.innerHTML = `
+                <div class="no-contacts">
+                    No contacts yet.
+                    <br><br>
+                    Click Add Contact
+                </div>
+            `;
+
+            return;
+
+        }
+
+
+        data.contacts.forEach(
+            contact => {
+
+                const div =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                div.className =
+                    "contact";
+
+
+                div.dataset.id =
+                    contact.id;
+
+
+                const firstLetter =
+                    contact.name
+                    .charAt(0)
+                    .toUpperCase();
+
+
+                let unread =
+                    contact.unread_count ||
+                    contact.unread ||
+                    0;
+
+
+                let unreadBadge = "";
+
+
+                if (
+                    Number(unread) > 0
+                ) {
+
+                    unreadBadge = `
+                        <span class="unread-badge">
+                            ${
+                                Number(unread) > 99
+                                ? "99"
+                                : unread
+                            }
+                        </span>
+                    `;
+
+                }
+
+
+                div.innerHTML = `
+
+                    <div class="avatar">
+                        ${firstLetter}
+                    </div>
+
+                    <div class="contact-info">
+
+                        <div class="contact-name">
+                            ${escapeHtml(contact.name)}
+                        </div>
+
+                        <div class="last-message">
+                            ${escapeHtml(contact.email)}
+                        </div>
+
+                    </div>
+
+                    <div class="contact-right">
+                        ${unreadBadge}
+                    </div>
+
+                `;
+
+
+                div.addEventListener(
+                    "click",
+                    function() {
+
+                        selectContact(
+                            contact
+                        );
+
+                    }
+                );
+
+
+                container.appendChild(
+                    div
+                );
+
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Could not load contacts:",
+            error
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   SELECT CONTACT
+===================================================== */
+
+async function selectContact(
+    contact
+) {
+
+    selectedContact =
+        contact;
+
+
+    document.getElementById(
+        "chatName"
+    ).textContent =
+        contact.name;
+
+
+    document.getElementById(
+        "chatStatus"
+    ).textContent =
+        contact.email;
+
+
+    document.getElementById(
+        "chatAvatar"
+    ).textContent =
+        contact.name
+        .charAt(0)
+        .toUpperCase();
+
+
+    document.getElementById(
+        "messageInput"
+    ).disabled = false;
+
+
+    document.getElementById(
+        "sendBtn"
+    ).disabled = false;
+
+
+    document.getElementById(
+        "fileBtn"
+    ).disabled = false;
+
+
+    await fetch(
+        "/api/messages/" +
+        contact.id +
+        "/read",
+        {
+            method: "POST"
+        }
+    );
+
+
+    if (socket) {
+
+        socket.emit(
+            "mark_read",
+            {
+                contact_id:
+                    contact.id
+            }
+        );
+
+    }
+
+
+    await loadMessages(
+        contact.id
+    );
+
+
+    loadContacts();
+
+}
+
+
+/* =====================================================
+   LOAD MESSAGES
+===================================================== */
+
+async function loadMessages(
+    contactId
+) {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/messages/" +
+                contactId
+            );
+
+
+        const data =
+            await response.json();
+
+
+        const container =
+            document.getElementById(
+                "messages"
+            );
+
+
+        container.innerHTML = "";
+
+
+        if (!data.success) {
+            return;
+        }
+
+
+        if (data.messages.length === 0) {
+
+            container.innerHTML = `
+                <div class="empty-chat">
+                    No messages yet.
+                    <br>
+                    Say hello
+                </div>
+            `;
+
+            return;
+
+        }
+
+
+        data.messages.forEach(
+            function(message) {
+
+                addMessageToScreen(
+                    message
+                );
+
+            }
+        );
+
+
+        scrollMessages();
+
+    } catch (error) {
+
+        console.error(
+            "Message loading error:",
+            error
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   ADD MESSAGE
+===================================================== */
+
+function addMessageToScreen(
+    message
+) {
+
+    const container =
+        document.getElementById(
+            "messages"
+        );
+
+
+    /*
+       Prevent duplicates
+    */
+
+    if (message.id) {
+
+        const existing =
+            container.querySelector(
+                '[data-message-id="' +
+                message.id +
+                '"]'
+            );
+
+
+        if (existing) {
+            return;
+        }
+
+    }
+
+
+    /*
+       Remove "No messages yet"
+       when first message arrives.
+    */
+
+    const empty =
+        container.querySelector(
+            ".empty-chat"
+        );
+
+
+    if (empty) {
+        empty.remove();
+    }
+
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+
+    if (
+        Number(message.sender_id) ===
+        Number(currentUser.id)
+    ) {
+
+        div.className =
+            "message sent";
+
+    } else {
+
+        div.className =
+            "message received";
+
+    }
+
+
+    if (message.id) {
+
+        div.dataset.messageId =
+            message.id;
+
+    }
+
+
+    let content = "";
+
+
+    /*
+       TEXT MESSAGE
+    */
+
+    if (message.message) {
+
+        content += `
+
+            <div class="bubble">
+                ${escapeHtml(message.message)}
+            </div>
+
+        `;
+
+    }
+
+
+    /*
+       IMAGE
+    */
+
+    if (
+        message.message_type === "image"
+    ) {
+
+        content += `
+
+            <div class="file-message">
+
+                <img
+                    src="${escapeHtml(message.file_url)}"
+                    class="chat-image"
+                    onclick="openImage(this.src)"
+                >
+
+                <div class="file-name">
+                    ${escapeHtml(message.file_name)}
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /*
+       VIDEO
+    */
+
+    else if (
+        message.message_type === "video"
+    ) {
+
+        content += `
+
+            <div class="file-message">
+
+                <video
+                    class="chat-video"
+                    controls
+                >
+                    <source
+                        src="${escapeHtml(message.file_url)}"
+                    >
+                </video>
+
+                <div class="file-name">
+                    ${escapeHtml(message.file_name)}
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /*
+       OTHER FILE
+    */
+
+    else if (
+        message.message_type === "file"
+    ) {
+
+        content += `
+
+            <div class="file-message">
+
+                <a
+                    href="${escapeHtml(message.file_url)}"
+                    target="_blank"
+                    download
+                    class="file-download"
+                >
+                    ${escapeHtml(message.file_name)}
+                </a>
+
+            </div>
+
+        `;
+
+    }
+
+
+    content += `
+
+        <span class="time">
+            ${escapeHtml(message.created_at)}
+        </span>
+
+    `;
+
+
+    div.innerHTML =
+        content;
+
+
+    container.appendChild(
+        div
+    );
+
+
+    scrollMessages();
+
+}
+
+
+/* =====================================================
+   SEND MESSAGE
+===================================================== */
+
+function sendMessage() {
+
+    console.log(
+        "Send button clicked"
+    );
+
+
+    if (!selectedContact) {
+
+        console.log(
+            "No contact selected"
+        );
+
+        return;
+
+    }
+
+
+    const input =
+        document.getElementById(
+            "messageInput"
+        );
+
+
+    const message =
+        input.value.trim();
+
+
+    if (!message) {
+        return;
+    }
+
+
+    if (!socket) {
+
+        alert(
+            "Chat connection is not ready. Please login again."
+        );
+
+        return;
+
+    }
+
+
+    if (!socket.connected) {
+
+        alert(
+            "Chat server is not connected."
+        );
+
+        return;
+
+    }
+
+
+    console.log(
+        "Sending message:",
+        message
+    );
+
+
+    socket.emit(
+        "send_message",
+        {
+            receiver_id:
+                selectedContact.id,
+
+            message:
+                message
+        }
+    );
+
+
+    input.value = "";
+
+}
+
+
+/* =====================================================
+   SEND BUTTON
+===================================================== */
+
+document.getElementById(
+    "sendBtn"
+).addEventListener(
+    "click",
+    function() {
+
+        sendMessage();
+
+    }
+);
+
+
+/* =====================================================
+   ENTER TO SEND
+===================================================== */
+
+document.getElementById(
+    "messageInput"
+).addEventListener(
+    "keydown",
+    function(event) {
+
+        if (
+            event.key === "Enter"
+        ) {
+
+            event.preventDefault();
+
+            sendMessage();
+
+        }
+
+    }
+);
+
+
+/* =====================================================
+   FILE UPLOAD
+===================================================== */
+
+const fileBtn =
+    document.getElementById(
+        "fileBtn"
+    );
+
+
+const fileInput =
+    document.getElementById(
+        "fileInput"
+    );
+
+
+fileBtn.addEventListener(
+    "click",
+    function() {
+
+        if (!selectedContact) {
+            return;
+        }
+
+        fileInput.click();
+
+    }
+);
+
+
+fileInput.addEventListener(
+    "change",
+    async function() {
+
+        const file =
+            this.files[0];
+
+
+        if (!file) {
+            return;
+        }
+
+
+        if (!selectedContact) {
+
+            alert(
+                "Select a contact first."
+            );
+
+            return;
+
+        }
+
+
+        const maxSize =
+            100 *
+            1024 *
+            1024;
+
+
+        if (
+            file.size > maxSize
+        ) {
+
+            alert(
+                "File is too large. Maximum size is 100 MB."
+            );
+
+            this.value = "";
+
+            return;
+
+        }
+
+
+        const formData =
+            new FormData();
+
+
+        formData.append(
+            "file",
+            file
+        );
+
+
+        formData.append(
+            "receiver_id",
+            selectedContact.id
+        );
+
+
+        try {
+
+            fileBtn.disabled = true;
+
+            fileBtn.textContent =
+                "Uploading";
+
+
+            const response =
+                await fetch(
+                    "/api/upload",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (data.success) {
+
+                addMessageToScreen(
+                    data.message
+                );
+
+            } else {
+
+                alert(
+                    data.message
+                );
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Upload error:",
+                error
+            );
+
+            alert(
+                "File upload failed."
+            );
+
+        }
+
+
+        fileBtn.disabled = false;
+
+        fileBtn.textContent =
+            "File";
+
+        this.value = "";
+
+    }
+);
+
+
+/* =====================================================
+   OPEN IMAGE
+===================================================== */
+
+function openImage(src) {
+
+    window.open(
+        src,
+        "_blank"
+    );
+
+}
+
+
+/* =====================================================
+   SCROLL
+===================================================== */
+
+function scrollMessages() {
+
+    const container =
+        document.getElementById(
+            "messages"
+        );
+
+
+    container.scrollTop =
+        container.scrollHeight;
+
+}
+
+
+/* =====================================================
+   ADD CONTACT
+===================================================== */
+
+const modal =
+    document.getElementById(
+        "contactModal"
+    );
+
+
+document.getElementById(
+    "addContactBtn"
+).addEventListener(
+    "click",
+    function() {
+
+        modal.classList.add(
+            "show"
+        );
+
+
+        document.getElementById(
+            "emailInput"
+        ).focus();
+
+    }
+);
+
+
+document.getElementById(
+    "closeModal"
+).addEventListener(
+    "click",
+    function() {
+
+        modal.classList.remove(
+            "show"
+        );
+
+    }
+);
+
+
+document.getElementById(
+    "confirmContact"
+).addEventListener(
+    "click",
+    addContact
+);
+
+
+async function addContact() {
+
+    const email =
+        document.getElementById(
+            "emailInput"
+        ).value.trim();
+
+
+    if (!email) {
+
+        showContactMessage(
+            "Enter an email address.",
+            "red"
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/add-contact",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        email: email
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (data.success) {
+
+            showContactMessage(
+                "Contact added successfully!",
+                "green"
+            );
+
+
+            document.getElementById(
+                "emailInput"
+            ).value = "";
+
+
+            await loadContacts();
+
+
+            setTimeout(
+                function() {
+
+                    modal.classList.remove(
+                        "show"
+                    );
+
+                },
+                800
+            );
+
+        } else {
+
+            showContactMessage(
+                data.message,
+                "red"
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        showContactMessage(
+            "Server connection error.",
+            "red"
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   CONTACT MESSAGE
+===================================================== */
+
+function showContactMessage(
+    message,
+    color
+) {
+
+    const element =
+        document.getElementById(
+            "contactMessage"
+        );
+
+
+    element.textContent =
+        message;
+
+
+    element.style.color =
+        color;
+
+}
+
+
+/* =====================================================
+   SEARCH
+===================================================== */
+
+document.getElementById(
+    "searchInput"
+).addEventListener(
+    "input",
+    function() {
+
+        const search =
+            this.value
+            .toLowerCase();
+
+
+        document
+            .querySelectorAll(
+                ".contact"
+            )
+            .forEach(
+                function(contact) {
+
+                    const name =
+                        contact
+                        .querySelector(
+                            ".contact-name"
+                        )
+                        ?.textContent
+                        .toLowerCase();
+
+
+                    if (
+                        name &&
+                        name.includes(search)
+                    ) {
+
+                        contact.style.display =
+                            "flex";
+
+                    } else {
+
+                        contact.style.display =
+                            "none";
+
+                    }
+
+                }
+            );
+
+    }
+);
+
+
+/* =====================================================
+   NOTIFICATION
+===================================================== */
+
+function showNotification(
+    text
+) {
+
+    console.log(
+        text
+    );
+
+}
+
+
+/* =====================================================
+   SECURITY
+===================================================== */
+
+function escapeHtml(
+    text
+) {
+
+    if (
+        text === null ||
+        text === undefined
+    ) {
+
+        return "";
+
+    }
+
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+
+    div.textContent =
+        String(text);
+
+
+    return div.innerHTML;
+
+}
+
+
+/* =====================================================
+   START
+===================================================== */
+
+checkLogin();
+
+</script>
+
+</body>
+</html>
