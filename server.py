@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_socketio import SocketIO, emit, join_room
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -17,7 +18,7 @@ socketio = SocketIO(
     engineio_logger=True
 )
 
-DATABASE = "/opt/render/project/src/data/mychat.db"
+DATABASE = os.environ.get("postgresql://mychat:s59yZ1tHTFAWvwG48aQYIFdC3qUopUnd@dpg-da2tf56gekts73bl3u6g-a/mychat_z1an")
 
 UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
 
