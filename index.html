@@ -305,17 +305,22 @@ let socket = null;
 function connectSocket() {
 
     if (socket) {
-
         try {
+            socket.removeAllListeners();
             socket.disconnect();
         } catch (e) {}
-
     }
 
-    socket = io({
-        transports: ["polling", "websocket"]
-    });
+    console.log("Connecting to chat server...");
 
+    socket = io("/", {
+        transports: ["polling"],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000
+    });
 
     socket.on("connect", function () {
 
@@ -324,31 +329,40 @@ function connectSocket() {
             socket.id
         );
 
+        // Update status
+        const status =
+            document.getElementById("chatStatus");
+
+        if (status && selectedContact) {
+            status.textContent =
+                selectedContact.email;
+        }
     });
 
-
-    socket.on("connect_error", function (error) {
+    socket.on("connect_error", function(error) {
 
         console.error(
             "Socket.IO connection error:",
             error
         );
 
+        console.log(
+            "Socket.IO will automatically reconnect..."
+        );
     });
 
-
-    socket.on("disconnect", function () {
+    socket.on("disconnect", function(reason) {
 
         console.log(
-            "Socket.IO disconnected"
+            "Socket.IO disconnected:",
+            reason
         );
-
     });
 
 
-    /* =========================
-       MESSAGE SENT
-    ========================= */
+    // =====================================================
+    // MESSAGE SENT
+    // =====================================================
 
     socket.on(
         "message_sent",
@@ -363,11 +377,6 @@ function connectSocket() {
                 return;
             }
 
-            /*
-               Always show the message
-               in the currently selected chat.
-            */
-
             if (
                 selectedContact &&
                 Number(selectedContact.id) ===
@@ -375,16 +384,16 @@ function connectSocket() {
             ) {
 
                 addMessageToScreen(message);
-
             }
 
+            loadContacts();
         }
     );
 
 
-    /* =========================
-       NEW MESSAGE
-    ========================= */
+    // =====================================================
+    // NEW MESSAGE
+    // =====================================================
 
     socket.on(
         "new_message",
@@ -398,12 +407,6 @@ function connectSocket() {
             if (!message) {
                 return;
             }
-
-
-            /*
-               If this conversation is open,
-               show the message immediately.
-            */
 
             if (
                 selectedContact &&
@@ -422,28 +425,19 @@ function connectSocket() {
                     }
                 );
 
+                loadContacts();
+
                 return;
-
             }
-
-
-            /*
-               Conversation isn't open.
-            */
 
             loadContacts();
 
             showNotification(
                 "New message received"
             );
-
         }
     );
 
-
-    /* =========================
-       MESSAGES READ
-    ========================= */
 
     socket.on(
         "messages_read",
@@ -453,7 +447,6 @@ function connectSocket() {
 
         }
     );
-
 }
 
 
@@ -1389,79 +1382,94 @@ function addMessageToScreen(
 
 function sendMessage() {
 
-    console.log(
-        "Send button clicked"
-    );
-
+    console.log("Send button clicked");
 
     if (!selectedContact) {
-
-        console.log(
-            "No contact selected"
-        );
-
+        console.log("No contact selected");
         return;
-
     }
 
-
     const input =
-        document.getElementById(
-            "messageInput"
-        );
-
+        document.getElementById("messageInput");
 
     const message =
         input.value.trim();
-
 
     if (!message) {
         return;
     }
 
 
+    // =====================================================
+    // SOCKET NOT CREATED
+    // =====================================================
+
     if (!socket) {
 
+        console.log(
+            "Socket does not exist. Connecting..."
+        );
+
+        connectSocket();
+
         alert(
-            "Chat connection is not ready. Please login again."
+            "Connecting to chat server. Please send again."
         );
 
         return;
-
     }
 
+
+    // =====================================================
+    // SOCKET NOT CONNECTED
+    // =====================================================
 
     if (!socket.connected) {
 
+        console.log(
+            "Socket is disconnected. Reconnecting..."
+        );
+
+        socket.connect();
+
         alert(
-            "Chat server is not connected."
+            "Chat server is reconnecting. Please send again."
         );
 
         return;
-
     }
 
+
+    // =====================================================
+    // SEND
+    // =====================================================
 
     console.log(
         "Sending message:",
         message
     );
 
-
     socket.emit(
         "send_message",
         {
             receiver_id:
-                selectedContact.id,
+                Number(selectedContact.id),
 
             message:
                 message
+        },
+        function() {
+
+            console.log(
+                "Message delivered to server."
+            );
+
         }
     );
 
-
     input.value = "";
 
+    input.focus();
 }
 
 
