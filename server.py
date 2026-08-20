@@ -684,7 +684,7 @@ def add_contact():
 
 
 # =========================================================
-# CONTACTS
+# CONTACTS + CHAT LIST + UNREAD COUNTS
 # =========================================================
 
 @app.route("/api/contacts")
@@ -695,8 +695,10 @@ def get_contacts():
     if not user_id:
 
         return jsonify({
-            "success": False
+            "success": False,
+            "contacts": []
         })
+
 
     conn = get_db()
 
@@ -704,101 +706,243 @@ def get_contacts():
         cursor_factory=psycopg2.extras.RealDictCursor
     )
 
-    cur.execute("""
-        SELECT
-            users.id,
-            users.name,
-            users.email
-        FROM contacts
-        JOIN users
-        ON users.id = contacts.contact_id
-        WHERE contacts.user_id = %s
-        ORDER BY users.name
-    """, (
-        user_id,
-    ))
 
-    contacts = cur.fetchall()
+    try:
 
-    result = []
-
-    for contact in contacts:
+        # =====================================================
+        # GET BOTH:
+        #
+        # 1. People added as contacts
+        # 2. People who have exchanged messages with this user
+        #
+        # This means a user does NOT need to add you as a
+        # contact for the chat to appear.
+        # =====================================================
 
         cur.execute("""
-            SELECT COUNT(*) AS count
-            FROM messages
-            WHERE sender_id = %s
-            AND receiver_id = %s
-            AND is_read = 0
-        """, (
-            contact["id"],
-            user_id
-        ))
+            SELECT DISTINCT
+                u.id,
+                u.name,
+                u.email
+            FROM users u
 
-        unread = cur.fetchone()["count"]
-
-        cur.execute("""
-            SELECT
-                message,
-                message_type,
-                file_name
-            FROM messages
             WHERE
-            (sender_id = %s AND receiver_id = %s)
-            OR
-            (sender_id = %s AND receiver_id = %s)
-            ORDER BY id DESC
-            LIMIT 1
+
+                u.id IN (
+
+                    -- Normal contacts
+                    SELECT contact_id
+                    FROM contacts
+                    WHERE user_id = %s
+
+                )
+
+                OR
+
+                u.id IN (
+
+                    -- People who sent messages to us
+                    SELECT sender_id
+                    FROM messages
+                    WHERE receiver_id = %s
+
+                    UNION
+
+                    -- People we sent messages to
+                    SELECT receiver_id
+                    FROM messages
+                    WHERE sender_id = %s
+
+                )
+
+            AND u.id != %s
+
+            ORDER BY LOWER(u.name) ASC
         """, (
             user_id,
-            contact["id"],
-            contact["id"],
+            user_id,
+            user_id,
             user_id
         ))
 
-        last_message = cur.fetchone()
 
-        preview = ""
+        contacts = cur.fetchall()
 
-        if last_message:
 
-            if last_message["message_type"] == "image":
+        result = []
 
-                preview = "Photo"
 
-            elif last_message["message_type"] == "video":
+        for contact in contacts:
 
-                preview = "Video"
+            contact_id = contact["id"]
 
-            elif last_message["message_type"] == "file":
 
-                preview = (
-                    last_message["file_name"]
-                    or "File"
-                )
+            # =================================================
+            # UNREAD MESSAGES
+            # =================================================
 
-            else:
+            cur.execute("""
+                SELECT COUNT(*) AS count
+                FROM messages
+                WHERE
+                    sender_id = %s
+                    AND receiver_id = %s
+                    AND is_read = 0
+            """, (
+                contact_id,
+                user_id
+            ))
 
-                preview = (
-                    last_message["message"]
-                    or ""
-                )
 
-        result.append({
-            "id": contact["id"],
-            "name": contact["name"],
-            "email": contact["email"],
-            "unread": unread,
-            "last_message": preview
+            unread_row = cur.fetchone()
+
+            unread = int(
+                unread_row["count"]
+                if unread_row
+                else 0
+            )
+
+
+            # =================================================
+            # LAST MESSAGE
+            # =================================================
+
+            cur.execute("""
+                SELECT
+                    id,
+                    message,
+                    message_type,
+                    file_name,
+                    created_at
+                FROM messages
+
+                WHERE
+                    (
+                        sender_id = %s
+                        AND receiver_id = %s
+                    )
+
+                    OR
+
+                    (
+                        sender_id = %s
+                        AND receiver_id = %s
+                    )
+
+                ORDER BY id DESC
+
+                LIMIT 1
+            """, (
+                user_id,
+                contact_id,
+                contact_id,
+                user_id
+            ))
+
+
+            last_message =
+                cur.fetchone()
+
+
+            preview = ""
+
+
+            if last_message:
+
+                if last_message["message_type"] == "image":
+
+                    preview = "📷 Photo"
+
+
+                elif last_message["message_type"] == "video":
+
+                    preview = "🎥 Video"
+
+
+                elif last_message["message_type"] == "file":
+
+                    preview = (
+                        "📎 "
+                        +
+                        (
+                            last_message["file_name"]
+                            or "File"
+                        )
+                    )
+
+
+                else:
+
+                    preview = (
+                        last_message["message"]
+                        or ""
+                    )
+
+
+            # =================================================
+            # ADD RESULT
+            # =================================================
+
+            result.append({
+
+                "id":
+                    contact["id"],
+
+                "name":
+                    contact["name"],
+
+                "email":
+                    contact["email"],
+
+                "unread":
+                    unread,
+
+                "unread_count":
+                    unread,
+
+                "last_message":
+                    preview
+
+            })
+
+
+        return jsonify({
+
+            "success":
+                True,
+
+            "contacts":
+                result
+
         })
 
-    cur.close()
-    conn.close()
 
-    return jsonify({
-        "success": True,
-        "contacts": result
-    })
+    except Exception as e:
+
+        print(
+            "CONTACTS ERROR:",
+            repr(e)
+        )
+
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "contacts":
+                [],
+
+            "message":
+                "Could not load contacts."
+
+        }), 500
+
+
+    finally:
+
+        cur.close()
+        conn.close()
 
 
 # =========================================================
