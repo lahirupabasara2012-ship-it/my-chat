@@ -20,9 +20,11 @@ app.secret_key = os.environ.get(
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading"
+    async_mode="threading",
+    manage_session=True,
+    logger=True,
+    engineio_logger=True
 )
-
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -890,55 +892,36 @@ def get_messages(contact_id):
 @socketio.on("send_message")
 def socket_send_message(data):
 
-    print(
-        "========== SEND MESSAGE =========="
-    )
+    print("========================================")
+    print("SEND MESSAGE EVENT")
+    print("Socket ID:", request.sid)
 
-    sender_id = session.get(
-        "user_id"
-    )
+    sender_id = session.get("user_id")
 
-    print(
-        "Session user:",
-        sender_id
-    )
+    print("Sender ID:", sender_id)
+    print("Data:", data)
 
     if not sender_id:
-
-        print(
-            "ERROR: User is not logged in"
-        )
-
+        print("ERROR: No logged-in user")
         return
 
     try:
-
-        receiver_id = int(
-            data.get("receiver_id")
-        )
-
+        receiver_id = int(data.get("receiver_id"))
     except Exception as e:
-
-        print(
-            "ERROR: Invalid receiver:",
-            e
-        )
-
+        print("ERROR: Invalid receiver ID:", e)
         return
 
     message = str(
-        data.get(
-            "message",
-            ""
-        )
+        data.get("message", "")
     ).strip()
 
     if not receiver_id or not message:
-
+        print("ERROR: Empty message or receiver")
         return
 
     try:
 
+        # Save to PostgreSQL
         saved = save_message(
             sender_id,
             receiver_id,
@@ -946,27 +929,51 @@ def socket_send_message(data):
             "text"
         )
 
-        # Receiver
-        socketio.emit(
-            "new_message",
-            saved,
-            room="user_" + str(receiver_id)
-        )
+        print("MESSAGE SAVED:")
+        print(saved)
 
-        # Sender
+        # -----------------------------------------
+        # SEND TO SENDER
+        # -----------------------------------------
+
         emit(
             "message_sent",
-            saved
+            saved,
+            to=request.sid
         )
 
         print(
-            "Message sent successfully!"
+            "Sent message_sent to:",
+            request.sid
         )
+
+        # -----------------------------------------
+        # SEND TO RECEIVER ROOM
+        # -----------------------------------------
+
+        receiver_room = (
+            "user_" +
+            str(receiver_id)
+        )
+
+        socketio.emit(
+            "new_message",
+            saved,
+            room=receiver_room
+        )
+
+        print(
+            "Sent new_message to room:",
+            receiver_room
+        )
+
+        print("MESSAGE DELIVERY COMPLETE")
+        print("========================================")
 
     except Exception as e:
 
         print(
-            "SEND ERROR:",
+            "SEND MESSAGE ERROR:",
             repr(e)
         )
 
