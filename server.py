@@ -1,42 +1,51 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_socketio import SocketIO, emit, join_room
-import uuid
 import psycopg2
 import psycopg2.extras
 import os
+import uuid
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 
+# =========================================================
+# APP
+# =========================================================
+
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "dev-secret-key"
+    "change-this-secret-key"
 )
 
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+
+
+# =========================================================
+# SOCKET.IO
+# =========================================================
 
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading"
+    async_mode="threading",
+    manage_session=True,
+    logger=True,
+    engineio_logger=True
 )
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-
-UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================================================
 # DATABASE
 # =========================================================
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+if not DATABASE_URL:
+    print("WARNING: DATABASE_URL is not set!")
+
 
 def get_db():
 
@@ -44,13 +53,6 @@ def get_db():
         raise RuntimeError(
             "DATABASE_URL environment variable is missing"
         )
-
-    conn = psycopg2.connect(DATABASE_URL)
-
-    return conn
-
-
-def get_db():
 
     conn = psycopg2.connect(
         DATABASE_URL
@@ -60,85 +62,7 @@ def get_db():
 
 
 # =========================================================
-# INITIALIZE DATABASE
-# =========================================================
-
-def init_db():
-
-    conn = get_db()
-
-    cur = conn.cursor()
-
-    # USERS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )
-    """)
-
-    # CONTACTS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS contacts (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            contact_id INTEGER NOT NULL,
-            UNIQUE(user_id, contact_id)
-        )
-    """)
-
-    # MESSAGES
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
-            sender_id INTEGER NOT NULL,
-            receiver_id INTEGER NOT NULL,
-            message TEXT,
-            message_type TEXT DEFAULT 'text',
-            file_name TEXT,
-            file_url TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_read INTEGER DEFAULT 0
-        )
-    """)
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
-
-    print("PostgreSQL database initialized successfully.")
-
-
-# =========================================================
-# HELPERS
-# =========================================================
-
-def allowed_file(filename):
-
-    if "." not in filename:
-        return False
-
-    extension = filename.rsplit(
-        ".",
-        1
-    )[1].lower()
-
-    return extension in ALLOWED_EXTENSIONS
-
-
-def row_to_dict(row):
-
-    if not row:
-        return None
-
-    return dict(row)
-
-
-# =========================================================
-# FILE SETTINGS
+# FILE UPLOAD
 # =========================================================
 
 UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
@@ -177,8 +101,71 @@ os.makedirs(
 )
 
 
+def allowed_file(filename):
+
+    if "." not in filename:
+        return False
+
+    extension = filename.rsplit(
+        ".",
+        1
+    )[1].lower()
+
+    return extension in ALLOWED_EXTENSIONS
+
+
 # =========================================================
-# GET MESSAGE
+# DATABASE INITIALIZATION
+# =========================================================
+
+def init_db():
+
+    conn = get_db()
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            contact_id INTEGER NOT NULL,
+            UNIQUE(user_id, contact_id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            sender_id INTEGER NOT NULL,
+            receiver_id INTEGER NOT NULL,
+            message TEXT,
+            message_type TEXT DEFAULT 'text',
+            file_name TEXT,
+            file_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_read INTEGER DEFAULT 0
+        )
+    """)
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    print("PostgreSQL database initialized successfully.")
+
+
+# =========================================================
+# MESSAGE HELPERS
 # =========================================================
 
 def get_message(message_id):
@@ -211,12 +198,21 @@ def get_message(message_id):
     cur.close()
     conn.close()
 
-    return row_to_dict(row)
+    if not row:
+        return None
 
+    return {
+        "id": row["id"],
+        "sender_id": row["sender_id"],
+        "receiver_id": row["receiver_id"],
+        "message": row["message"],
+        "message_type": row["message_type"],
+        "file_name": row["file_name"],
+        "file_url": row["file_url"],
+        "created_at": str(row["created_at"]),
+        "is_read": row["is_read"]
+    }
 
-# =========================================================
-# SAVE MESSAGE
-# =========================================================
 
 def save_message(
     sender_id,
@@ -229,9 +225,7 @@ def save_message(
 
     conn = get_db()
 
-    cur = conn.cursor(
-        cursor_factory=psycopg2.extras.RealDictCursor
-    )
+    cur = conn.cursor()
 
     cur.execute("""
         INSERT INTO messages
@@ -255,7 +249,7 @@ def save_message(
         file_url
     ))
 
-    message_id = cur.fetchone()["id"]
+    message_id = cur.fetchone()[0]
 
     conn.commit()
 
@@ -301,7 +295,7 @@ def uploaded_file(filename):
 
 
 # =========================================================
-# SIGN UP
+# SIGNUP
 # =========================================================
 
 @app.route(
@@ -312,19 +306,16 @@ def signup():
 
     data = request.get_json() or {}
 
-    name = data.get(
-        "name",
-        ""
+    name = str(
+        data.get("name", "")
     ).strip()
 
-    email = data.get(
-        "email",
-        ""
+    email = str(
+        data.get("email", "")
     ).strip().lower()
 
-    password = data.get(
-        "password",
-        ""
+    password = str(
+        data.get("password", "")
     )
 
     if not name or not email or not password:
@@ -347,62 +338,76 @@ def signup():
         cursor_factory=psycopg2.extras.RealDictCursor
     )
 
-    # Check existing user
-    cur.execute("""
-        SELECT id
-        FROM users
-        WHERE email = %s
-    """, (
-        email,
-    ))
+    try:
 
-    existing = cur.fetchone()
+        cur.execute("""
+            SELECT id
+            FROM users
+            WHERE email = %s
+        """, (
+            email,
+        ))
 
-    if existing:
+        existing = cur.fetchone()
 
-        cur.close()
-        conn.close()
+        if existing:
+
+            return jsonify({
+                "success": False,
+                "message": "This email is already registered."
+            })
+
+        hashed_password = generate_password_hash(
+            password
+        )
+
+        cur.execute("""
+            INSERT INTO users
+            (
+                name,
+                email,
+                password
+            )
+            VALUES (%s, %s, %s)
+            RETURNING id
+        """, (
+            name,
+            email,
+            hashed_password
+        ))
+
+        user_id = cur.fetchone()["id"]
+
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Account created successfully.",
+            "user": {
+                "id": user_id,
+                "name": name,
+                "email": email
+            }
+        })
+
+    except Exception as e:
+
+        conn.rollback()
+
+        print(
+            "SIGNUP ERROR:",
+            repr(e)
+        )
 
         return jsonify({
             "success": False,
-            "message": "This email is already registered."
+            "message": "Could not create account."
         })
 
-    hashed_password = generate_password_hash(
-        password
-    )
+    finally:
 
-    cur.execute("""
-        INSERT INTO users
-        (
-            name,
-            email,
-            password
-        )
-        VALUES (%s, %s, %s)
-        RETURNING id
-    """, (
-        name,
-        email,
-        hashed_password
-    ))
-
-    user_id = cur.fetchone()["id"]
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
-
-    return jsonify({
-        "success": True,
-        "message": "Account created successfully.",
-        "user": {
-            "id": user_id,
-            "name": name,
-            "email": email
-        }
-    })
+        cur.close()
+        conn.close()
 
 
 # =========================================================
@@ -417,14 +422,12 @@ def login():
 
     data = request.get_json() or {}
 
-    email = data.get(
-        "email",
-        ""
+    email = str(
+        data.get("email", "")
     ).strip().lower()
 
-    password = data.get(
-        "password",
-        ""
+    password = str(
+        data.get("password", "")
     )
 
     conn = get_db()
@@ -486,9 +489,7 @@ def login():
 @app.route("/api/me")
 def current_user():
 
-    user_id = session.get(
-        "user_id"
-    )
+    user_id = session.get("user_id")
 
     if not user_id:
 
@@ -563,9 +564,7 @@ def logout():
 )
 def add_contact():
 
-    user_id = session.get(
-        "user_id"
-    )
+    user_id = session.get("user_id")
 
     if not user_id:
 
@@ -576,9 +575,8 @@ def add_contact():
 
     data = request.get_json() or {}
 
-    email = data.get(
-        "email",
-        ""
+    email = str(
+        data.get("email", "")
     ).strip().lower()
 
     if not email:
@@ -594,98 +592,105 @@ def add_contact():
         cursor_factory=psycopg2.extras.RealDictCursor
     )
 
-    cur.execute("""
-        SELECT
-            id,
-            name,
-            email
-        FROM users
-        WHERE email = %s
-    """, (
-        email,
-    ))
+    try:
 
-    contact = cur.fetchone()
+        cur.execute("""
+            SELECT
+                id,
+                name,
+                email
+            FROM users
+            WHERE email = %s
+        """, (
+            email,
+        ))
 
-    if not contact:
+        contact = cur.fetchone()
 
-        cur.close()
-        conn.close()
+        if not contact:
 
-        return jsonify({
-            "success": False,
-            "message": "No account found with this email."
-        })
+            return jsonify({
+                "success": False,
+                "message": "No account found with this email."
+            })
 
-    if contact["id"] == user_id:
+        if contact["id"] == user_id:
 
-        cur.close()
-        conn.close()
+            return jsonify({
+                "success": False,
+                "message": "You cannot add yourself."
+            })
 
-        return jsonify({
-            "success": False,
-            "message": "You cannot add yourself."
-        })
-
-    cur.execute("""
-        SELECT id
-        FROM contacts
-        WHERE user_id = %s
-        AND contact_id = %s
-    """, (
-        user_id,
-        contact["id"]
-    ))
-
-    already = cur.fetchone()
-
-    if already:
-
-        cur.close()
-        conn.close()
-
-        return jsonify({
-            "success": False,
-            "message": "This contact is already added."
-        })
-
-    cur.execute("""
-        INSERT INTO contacts
-        (
+        cur.execute("""
+            SELECT id
+            FROM contacts
+            WHERE user_id = %s
+            AND contact_id = %s
+        """, (
             user_id,
-            contact_id
+            contact["id"]
+        ))
+
+        already = cur.fetchone()
+
+        if already:
+
+            return jsonify({
+                "success": False,
+                "message": "This contact is already added."
+            })
+
+        cur.execute("""
+            INSERT INTO contacts
+            (
+                user_id,
+                contact_id
+            )
+            VALUES (%s, %s)
+        """, (
+            user_id,
+            contact["id"]
+        ))
+
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "contact": {
+                "id": contact["id"],
+                "name": contact["name"],
+                "email": contact["email"]
+            }
+        })
+
+    except Exception as e:
+
+        conn.rollback()
+
+        print(
+            "ADD CONTACT ERROR:",
+            repr(e)
         )
-        VALUES (%s, %s)
-    """, (
-        user_id,
-        contact["id"]
-    ))
 
-    conn.commit()
+        return jsonify({
+            "success": False,
+            "message": "Could not add contact."
+        })
 
-    cur.close()
-    conn.close()
+    finally:
 
-    return jsonify({
-        "success": True,
-        "contact": {
-            "id": contact["id"],
-            "name": contact["name"],
-            "email": contact["email"]
-        }
-    })
+        cur.close()
+        conn.close()
 
 
 # =========================================================
-# CONTACTS + UNREAD COUNTS
+# CONTACTS
 # =========================================================
 
 @app.route("/api/contacts")
 def get_contacts():
 
-    user_id = session.get(
-        "user_id"
-    )
+    user_id = session.get("user_id")
 
     if not user_id:
 
@@ -758,18 +763,22 @@ def get_contacts():
         if last_message:
 
             if last_message["message_type"] == "image":
-                preview = "📷 Photo"
+
+                preview = "Photo"
 
             elif last_message["message_type"] == "video":
-                preview = "🎥 Video"
+
+                preview = "Video"
 
             elif last_message["message_type"] == "file":
-                preview = "📎 " + (
+
+                preview = (
                     last_message["file_name"]
                     or "File"
                 )
 
             else:
+
                 preview = (
                     last_message["message"]
                     or ""
@@ -801,9 +810,7 @@ def get_contacts():
 )
 def get_messages(contact_id):
 
-    user_id = session.get(
-        "user_id"
-    )
+    user_id = session.get("user_id")
 
     if not user_id:
 
@@ -817,7 +824,6 @@ def get_messages(contact_id):
         cursor_factory=psycopg2.extras.RealDictCursor
     )
 
-    # Mark received messages as read
     cur.execute("""
         UPDATE messages
         SET is_read = 1
@@ -883,42 +889,60 @@ def get_messages(contact_id):
 
 
 # =========================================================
-# SEND TEXT MESSAGE
+# REALTIME SEND TEXT MESSAGE
 # =========================================================
 
 @socketio.on("send_message")
 def socket_send_message(data):
 
-    print("========================================")
-    print("SEND MESSAGE EVENT")
+    print("")
+    print("==========================================")
+    print("REALTIME MESSAGE RECEIVED")
     print("Socket ID:", request.sid)
+    print("Data:", data)
 
     sender_id = session.get("user_id")
 
     print("Sender ID:", sender_id)
-    print("Data:", data)
 
     if not sender_id:
-        print("ERROR: No logged-in user")
-        return
+
+        print("ERROR: Socket has no logged-in user")
+
+        return {
+            "success": False,
+            "message": "Not logged in"
+        }
 
     try:
-        receiver_id = int(data.get("receiver_id"))
-    except Exception as e:
-        print("ERROR: Invalid receiver ID:", e)
-        return
+
+        receiver_id = int(
+            data.get("receiver_id")
+        )
+
+    except Exception:
+
+        print("ERROR: Invalid receiver ID")
+
+        return {
+            "success": False,
+            "message": "Invalid receiver"
+        }
 
     message = str(
         data.get("message", "")
     ).strip()
 
     if not receiver_id or not message:
-        print("ERROR: Empty message or receiver")
-        return
+
+        return {
+            "success": False,
+            "message": "Invalid message"
+        }
 
     try:
 
-        # Save to PostgreSQL
+        # Save message to PostgreSQL
         saved = save_message(
             sender_id,
             receiver_id,
@@ -926,27 +950,31 @@ def socket_send_message(data):
             "text"
         )
 
-        print("MESSAGE SAVED:")
-        print(saved)
+        print("Saved message:", saved)
 
-        # -----------------------------------------
+        # ------------------------------------------
         # SEND TO SENDER
-        # -----------------------------------------
+        # ------------------------------------------
 
-        emit(
+        sender_room = (
+            "user_" +
+            str(sender_id)
+        )
+
+        socketio.emit(
             "message_sent",
             saved,
-            to=request.sid
+            room=sender_room
         )
 
         print(
-            "Sent message_sent to:",
-            request.sid
+            "message_sent ->",
+            sender_room
         )
 
-        # -----------------------------------------
-        # SEND TO RECEIVER ROOM
-        # -----------------------------------------
+        # ------------------------------------------
+        # SEND TO RECEIVER
+        # ------------------------------------------
 
         receiver_room = (
             "user_" +
@@ -960,12 +988,18 @@ def socket_send_message(data):
         )
 
         print(
-            "Sent new_message to room:",
+            "new_message ->",
             receiver_room
         )
 
-        print("MESSAGE DELIVERY COMPLETE")
-        print("========================================")
+        print("REALTIME MESSAGE COMPLETE")
+        print("==========================================")
+        print("")
+
+        return {
+            "success": True,
+            "message_id": saved["id"]
+        }
 
     except Exception as e:
 
@@ -974,9 +1008,14 @@ def socket_send_message(data):
             repr(e)
         )
 
+        return {
+            "success": False,
+            "message": "Could not send message"
+        }
+
 
 # =========================================================
-# UPLOAD FILE
+# FILE UPLOAD
 # =========================================================
 
 @app.route(
@@ -985,9 +1024,7 @@ def socket_send_message(data):
 )
 def upload_file():
 
-    sender_id = session.get(
-        "user_id"
-    )
+    sender_id = session.get("user_id")
 
     if not sender_id:
 
@@ -1036,9 +1073,7 @@ def upload_file():
             "message": "No file selected."
         })
 
-    if not allowed_file(
-        file.filename
-    ):
+    if not allowed_file(file.filename):
 
         return jsonify({
             "success": False,
@@ -1077,7 +1112,6 @@ def upload_file():
         save_path
     )
 
-    # Determine type
     image_extensions = {
         "png",
         "jpg",
@@ -1115,37 +1149,51 @@ def upload_file():
         + unique_name
     )
 
-    saved = save_message(
-        sender_id,
-        receiver_id,
-        "",
-        message_type,
-        original_name,
-        file_url
-    )
+    try:
 
-    # Receiver
-    socketio.emit(
-        "new_message",
-        saved,
-        room="user_" + str(receiver_id)
-    )
+        saved = save_message(
+            sender_id,
+            receiver_id,
+            "",
+            message_type,
+            original_name,
+            file_url
+        )
 
-    # Sender
-    socketio.emit(
-        "message_sent",
-        saved,
-        room="user_" + str(sender_id)
-    )
+        # Sender
+        socketio.emit(
+            "message_sent",
+            saved,
+            room="user_" + str(sender_id)
+        )
 
-    return jsonify({
-        "success": True,
-        "message": saved
-    })
+        # Receiver
+        socketio.emit(
+            "new_message",
+            saved,
+            room="user_" + str(receiver_id)
+        )
+
+        return jsonify({
+            "success": True,
+            "message": saved
+        })
+
+    except Exception as e:
+
+        print(
+            "UPLOAD MESSAGE ERROR:",
+            repr(e)
+        )
+
+        return jsonify({
+            "success": False,
+            "message": "Could not save file message."
+        })
 
 
 # =========================================================
-# MARK CHAT AS READ
+# MARK AS READ
 # =========================================================
 
 @app.route(
@@ -1154,9 +1202,7 @@ def upload_file():
 )
 def mark_read(contact_id):
 
-    user_id = session.get(
-        "user_id"
-    )
+    user_id = session.get("user_id")
 
     if not user_id:
 
@@ -1184,6 +1230,16 @@ def mark_read(contact_id):
     cur.close()
     conn.close()
 
+    # Tell the other side to refresh unread count
+    socketio.emit(
+        "messages_read",
+        {
+            "user_id": user_id,
+            "contact_id": contact_id
+        },
+        room="user_" + str(contact_id)
+    )
+
     return jsonify({
         "success": True
     })
@@ -1198,66 +1254,82 @@ def socket_connect():
 
     user_id = session.get("user_id")
 
-    print("================================")
+    print("")
+    print("==========================================")
     print("SOCKET CONNECT")
-    print("Session user:", user_id)
     print("Socket ID:", request.sid)
-    print("================================")
+    print("Session user:", user_id)
 
     if not user_id:
-        print("Socket connected WITHOUT login")
-        return False
 
-    room_name = "user_" + str(user_id)
+        print("WARNING: Socket connected without login")
+        print("==========================================")
 
-    join_room(room_name)
+        return True
 
-    print(
-        "User joined room:",
+    room_name = (
+        "user_" +
+        str(user_id)
+    )
+
+    join_room(
         room_name
     )
 
+    print(
+        "Joined room:",
+        room_name
+    )
+
+    print("SOCKET CONNECT COMPLETE")
+    print("==========================================")
+    print("")
+
+    return True
+
+
 # =========================================================
-# INITIALIZE DATABASE
+# SOCKET DISCONNECT
 # =========================================================
 
-init_db()
+@socketio.on("disconnect")
+def socket_disconnect():
+
+    print(
+        "Socket disconnected:",
+        request.sid
+    )
 
 
 # =========================================================
-# START LOCAL SERVER
+# STARTUP
+# =========================================================
+
+try:
+
+    init_db()
+
+except Exception as e:
+
+    print(
+        "DATABASE INITIALIZATION ERROR:",
+        repr(e)
+    )
+
+
+# =========================================================
+# LOCAL RUN
 # =========================================================
 
 if __name__ == "__main__":
 
-    print("=" * 50)
-    print("                  MyChat")
-    print("=" * 50)
-
-    print("")
-    print(
-        "Server: http://127.0.0.1:8000"
-    )
-
-    print("")
-    print(
-        "Real-time chat enabled!"
-    )
-
-    print(
-        "File uploads enabled!"
-    )
-
-    print(
-        "Maximum file size: 100 MB"
-    )
-
-    print("")
-    print(
-        "Press CTRL+C to stop."
-    )
-
-    print("=" * 50)
+    print("=" * 60)
+    print("MyChat")
+    print("=" * 60)
+    print("Realtime chat enabled")
+    print("File uploads enabled")
+    print("Maximum file size: 100 MB")
+    print("=" * 60)
 
     socketio.run(
         app,
