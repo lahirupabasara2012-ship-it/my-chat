@@ -395,59 +395,131 @@ function connectSocket() {
     // NEW MESSAGE
     // =====================================================
 
-    socket.on(
-        "new_message",
-        function(message) {
+socket.on("new_message", async function(message) {
 
-            console.log(
-                "NEW MESSAGE:",
-                message
+    console.log("NEW MESSAGE:", message);
+
+    if (!message) {
+        return;
+    }
+
+    const senderId = Number(message.sender_id);
+
+    // ==========================================
+    // CURRENT CHAT IS ALREADY OPEN
+    // ==========================================
+
+    if (
+        selectedContact &&
+        Number(selectedContact.id) === senderId
+    ) {
+
+        addMessageToScreen(message);
+
+        try {
+
+            await fetch(
+                "/api/messages/" +
+                senderId +
+                "/read",
+                {
+                    method: "POST"
+                }
             );
 
-            if (!message) {
-                return;
-            }
+        } catch (error) {
 
-            if (
-                selectedContact &&
-                Number(selectedContact.id) ===
-                Number(message.sender_id)
-            ) {
+            console.error(
+                "Read status error:",
+                error
+            );
 
-                addMessageToScreen(message);
+        }
 
-                fetch(
-                    "/api/messages/" +
-                    message.sender_id +
-                    "/read",
-                    {
-                        method: "POST"
-                    }
+        loadContacts();
+
+        return;
+    }
+
+
+    // ==========================================
+    // MESSAGE FROM SOMEONE WHO IS NOT
+    // CURRENTLY SELECTED
+    // ==========================================
+
+    try {
+
+        // Get sender information
+        const response = await fetch(
+            "/api/user/" + senderId
+        );
+
+        const data = await response.json();
+
+        if (data.success && data.user) {
+
+            const sender = data.user;
+
+            /*
+             * Check whether sender already exists
+             * in our contact list.
+             */
+
+            const existingContact =
+                document.querySelector(
+                    '.contact[data-id="' +
+                    sender.id +
+                    '"]'
                 );
 
-                loadContacts();
 
-                return;
+            // ======================================
+            // NOT A CONTACT
+            // ======================================
+
+            if (!existingContact) {
+
+                console.log(
+                    "Message received from non-contact:",
+                    sender
+                );
+
+                /*
+                 * Create temporary contact.
+                 * This lets the user open the chat
+                 * even though they haven't added
+                 * the sender.
+                 */
+
+                createTemporaryContact(
+                    sender,
+                    message
+                );
+
             }
 
-            loadContacts();
-
-            showNotification(
-                "New message received"
-            );
         }
+
+    } catch (error) {
+
+        console.error(
+            "Could not get sender:",
+            error
+        );
+
+    }
+
+
+    // Refresh normal contacts
+    loadContacts();
+
+
+    // Notification
+    showNotification(
+        "New message received"
     );
 
-
-    socket.on(
-        "messages_read",
-        function() {
-
-            loadContacts();
-
-        }
-    );
-}
+});
 
 
 /* =====================================================
