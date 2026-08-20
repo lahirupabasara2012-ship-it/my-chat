@@ -3,42 +3,51 @@ from flask_socketio import SocketIO, emit, join_room
 import psycopg2
 import psycopg2.extras
 import os
-import uuid
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 
-# =========================================================
-# APP
-# =========================================================
-
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "change-this-secret-key"
+    "dev-secret-key"
 )
+
 
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading",
-    logger=True,
-    engineio_logger=True
+    async_mode="threading"
 )
+
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+
+UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================================================
 # DATABASE
 # =========================================================
 
-DATABASE_URL = os.environ.get("postgresql://mychat:s59yZ1tHTFAWvwG48aQYIFdC3qUopUnd@dpg-da2tf56gekts73bl3u6g-a/mychat_z1an")
+def get_db():
 
-if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL environment variable is not set."
-    )
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "DATABASE_URL environment variable is missing"
+        )
+
+    conn = psycopg2.connect(DATABASE_URL)
+
+    return conn
 
 
 def get_db():
