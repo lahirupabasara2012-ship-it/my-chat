@@ -952,6 +952,11 @@ async function loadContacts() {
             );
 
 
+        if (!container) {
+            return;
+        }
+
+
         container.innerHTML = "";
 
 
@@ -960,7 +965,10 @@ async function loadContacts() {
         }
 
 
-        if (data.contacts.length === 0) {
+        if (
+            !data.contacts ||
+            data.contacts.length === 0
+        ) {
 
             container.innerHTML = `
                 <div class="no-contacts">
@@ -976,7 +984,7 @@ async function loadContacts() {
 
 
         data.contacts.forEach(
-            contact => {
+            function(contact) {
 
                 const div =
                     document.createElement(
@@ -992,29 +1000,46 @@ async function loadContacts() {
                     contact.id;
 
 
+                // ==========================================
+                // HIGHLIGHT CURRENT CHAT
+                // ==========================================
+
+                if (
+                    selectedContact &&
+                    Number(selectedContact.id) ===
+                    Number(contact.id)
+                ) {
+
+                    div.classList.add(
+                        "active"
+                    );
+
+                }
+
+
                 const firstLetter =
                     contact.name
                     .charAt(0)
                     .toUpperCase();
 
 
-                let unread =
-                    contact.unread_count ||
-                    contact.unread ||
-                    0;
+                const unread =
+                    Number(
+                        contact.unread_count ||
+                        contact.unread ||
+                        0
+                    );
 
 
                 let unreadBadge = "";
 
 
-                if (
-                    Number(unread) > 0
-                ) {
+                if (unread > 0) {
 
                     unreadBadge = `
                         <span class="unread-badge">
                             ${
-                                Number(unread) > 99
+                                unread > 99
                                 ? "99"
                                 : unread
                             }
@@ -1024,10 +1049,20 @@ async function loadContacts() {
                 }
 
 
+                // ==========================================
+                // LAST MESSAGE PREVIEW
+                // ==========================================
+
+                let preview =
+                    contact.last_message ||
+                    contact.email ||
+                    "";
+
+
                 div.innerHTML = `
 
                     <div class="avatar">
-                        ${firstLetter}
+                        ${escapeHtml(firstLetter)}
                     </div>
 
                     <div class="contact-info">
@@ -1037,7 +1072,7 @@ async function loadContacts() {
                         </div>
 
                         <div class="last-message">
-                            ${escapeHtml(contact.email)}
+                            ${escapeHtml(preview)}
                         </div>
 
                     </div>
@@ -1048,6 +1083,10 @@ async function loadContacts() {
 
                 `;
 
+
+                // ==========================================
+                // OPEN CHAT
+                // ==========================================
 
                 div.addEventListener(
                     "click",
@@ -1067,6 +1106,7 @@ async function loadContacts() {
 
             }
         );
+
 
     } catch (error) {
 
