@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_socketio import SocketIO, emit, join_room
+import uuid
 import psycopg2
 import psycopg2.extras
 import os
@@ -1191,27 +1192,26 @@ def mark_read(contact_id):
 @socketio.on("connect")
 def socket_connect():
 
-    user_id = session.get(
-        "user_id"
+    user_id = session.get("user_id")
+
+    print("================================")
+    print("SOCKET CONNECT")
+    print("Session user:", user_id)
+    print("Socket ID:", request.sid)
+    print("================================")
+
+    if not user_id:
+        print("Socket connected WITHOUT login")
+        return False
+
+    room_name = "user_" + str(user_id)
+
+    join_room(room_name)
+
+    print(
+        "User joined room:",
+        room_name
     )
-
-    if user_id:
-
-        join_room(
-            "user_" + str(user_id)
-        )
-
-        print(
-            "User connected:",
-            user_id
-        )
-
-    else:
-
-        print(
-            "Socket connected without login"
-        )
-
 
 # =========================================================
 # INITIALIZE DATABASE
