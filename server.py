@@ -39,7 +39,7 @@ socketio = SocketIO(
 # DATABASE
 # =========================================================
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("postgresql://mychat:s59yZ1tHTFAWvwG48aQYIFdC3qUopUnd@dpg-da2tf56gekts73bl3u6g-a.singapore-postgres.render.com/mychat_z1an")
 
 
 def get_db():
