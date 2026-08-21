@@ -314,7 +314,8 @@ function connectSocket() {
     console.log("Connecting to chat server...");
 
     socket = io("/", {
-        transports: ["polling"],
+        transports: ["websocket", "polling"],
+        upgrade: true,
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
@@ -1513,41 +1514,22 @@ function sendMessage() {
 
 
     // =====================================================
-    // SOCKET NOT CREATED
+    // SOCKET CONNECTION
     // =====================================================
 
+    // If the socket is temporarily disconnected, reconnect and
+    // keep the typed message in the input instead of losing it.
     if (!socket) {
-
-        console.log(
-            "Socket does not exist. Connecting..."
-        );
-
+        console.log("Socket does not exist. Connecting...");
         connectSocket();
-
-        alert(
-            "Connecting to chat server. Please send again."
-        );
-
+        alert("Chat server is connecting. Please wait a moment, then send again.");
         return;
     }
 
-
-    // =====================================================
-    // SOCKET NOT CONNECTED
-    // =====================================================
-
     if (!socket.connected) {
-
-        console.log(
-            "Socket is disconnected. Reconnecting..."
-        );
-
+        console.log("Socket is disconnected. Reconnecting...");
         socket.connect();
-
-        alert(
-            "Chat server is reconnecting. Please send again."
-        );
-
+        alert("Chat server is reconnecting. Please wait a moment, then send again.");
         return;
     }
 
