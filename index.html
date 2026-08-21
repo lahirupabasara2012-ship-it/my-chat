@@ -1588,47 +1588,126 @@ function addMessageToScreen(
 
 function sendMessage() {
 
-    console.log("Send button clicked");
+    console.log(
+        "Send button clicked"
+    );
+
 
     if (!selectedContact) {
-        console.log("No contact selected");
+
+        console.log(
+            "No contact selected"
+        );
+
         return;
+
     }
 
+
     const input =
-        document.getElementById("messageInput");
+        document.getElementById(
+            "messageInput"
+        );
+
 
     const message =
         input.value.trim();
+
 
     if (!message) {
         return;
     }
 
 
+    const receiverId =
+        Number(
+            selectedContact.id
+        );
+
+
     // =====================================================
-    // SOCKET CONNECTION
+    // SOCKET NOT AVAILABLE
     // =====================================================
 
-    // If the socket is temporarily disconnected, reconnect and
-    // keep the typed message in the input instead of losing it.
     if (!socket) {
-        console.log("Socket does not exist. Connecting...");
+
+        console.log(
+            "Socket does not exist."
+        );
+
+
+        /*
+         * Keep the message.
+         * It will be sent after Socket.IO connects.
+         */
+
+        window.pendingMessage = {
+            receiver_id: receiverId,
+            message: message
+        };
+
+
+        input.value = "";
+
+
         connectSocket();
-        alert("Chat server is connecting. Please wait a moment, then send again.");
+
+
         return;
+
     }
+
+
+    // =====================================================
+    // SOCKET CONNECTING / DISCONNECTED
+    // =====================================================
 
     if (!socket.connected) {
-        console.log("Socket is disconnected. Reconnecting...");
-        socket.connect();
-        alert("Chat server is reconnecting. Please wait a moment, then send again.");
+
+        console.log(
+            "Socket is not connected."
+        );
+
+
+        /*
+         * Keep the message until connection
+         * is available.
+         */
+
+        window.pendingMessage = {
+            receiver_id: receiverId,
+            message: message
+        };
+
+
+        input.value = "";
+
+
+        /*
+         * Try to reconnect.
+         */
+
+        try {
+
+            socket.connect();
+
+        } catch (error) {
+
+            console.error(
+                "Socket reconnect error:",
+                error
+            );
+
+        }
+
+
         return;
+
     }
 
 
     // =====================================================
-    // SEND
+    // SEND IMMEDIATELY
     // =====================================================
 
     console.log(
@@ -1636,27 +1715,29 @@ function sendMessage() {
         message
     );
 
+
     socket.emit(
         "send_message",
         {
             receiver_id:
-                Number(selectedContact.id),
+                receiverId,
 
             message:
                 message
-        },
-        function() {
-
-            console.log(
-                "Message delivered to server."
-            );
-
         }
     );
 
+
+    /*
+     * Clear input only after successfully
+     * sending the event to Socket.IO.
+     */
+
     input.value = "";
 
+
     input.focus();
+
 }
 
 
