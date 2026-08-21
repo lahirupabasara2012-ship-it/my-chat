@@ -962,7 +962,7 @@ def get_contacts():
  
         cur.execute( 
             """ 
-            SELECT DISTINCT 
+            SELECT 
                 u.id, 
                 u.name, 
                 u.email 
