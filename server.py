@@ -21,10 +21,17 @@ app.secret_key = os.environ.get(
 )
 
 
+# Render uses HTTPS, so make the Flask session cookie work correctly there.
+# SECRET_KEY should be set as a Render environment variable.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
+
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading"
+    async_mode="threading",
+    manage_session=True
 )
 
 
@@ -51,8 +58,6 @@ def get_db():
 # =========================================================
 # FILE UPLOAD SETTINGS
 # =========================================================
-
-UPLOAD_FOLDER = "/opt/render/project/src/data/uploads"
 
 ALLOWED_EXTENSIONS = {
     "png",
@@ -283,6 +288,18 @@ def save_message(
     return get_message(
         message_id
     )
+
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.route("/health")
+def health():
+    return jsonify({
+        "success": True,
+        "status": "ok"
+    })
 
 
 # =========================================================
@@ -619,9 +636,22 @@ def logout():
 
     session.clear()
 
-    return jsonify({
+    response = jsonify({
         "success": True
     })
+
+    # Explicitly expire the Flask session cookie.
+    response.set_cookie(
+        app.config.get("SESSION_COOKIE_NAME", "session"),
+        "",
+        expires=0,
+        max_age=0,
+        httponly=True,
+        samesite="Lax",
+        secure=bool(os.environ.get("RENDER"))
+    )
+
+    return response
 
 
 # =========================================================
@@ -1921,6 +1951,8 @@ def socket_connect():
             "Socket connected without login"
         )
 
+        return False
+
 
 # =========================================================
 # SOCKET DISCONNECT
@@ -1943,6 +1975,12 @@ def socket_disconnect():
 # =========================================================
 # INITIALIZE DATABASE
 # =========================================================
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is missing. "
+        "Add your Render PostgreSQL DATABASE_URL to the web service."
+    )
 
 init_db()
 
