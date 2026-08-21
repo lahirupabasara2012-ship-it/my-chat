@@ -339,7 +339,7 @@ def get_message(message_id):
                     row["created_at"]
                 )
 
-         return row 
+        return row 
  
     finally: 
  
