@@ -1931,8 +1931,17 @@ def socket_connect():
 # SOCKET DISCONNECT 
 # ========================================================= 
  
-@socketio.on("disconnect") 
-def socket_disconnect(): 
+@socketio.on("disconnect")
+def socket_disconnect(reason=None):
+
+    user_id = session.get("user_id")
+
+    print(
+        "User disconnected:",
+        user_id,
+        "Reason:",
+        reason
+    ) 
  
     user_id = session.get("user_id") 
  
