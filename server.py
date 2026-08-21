@@ -329,9 +329,17 @@ def get_message(message_id):
             (message_id,) 
         ) 
  
-        row = cur.fetchone() 
- 
-        return row_to_dict(row) 
+        row = cur.fetchone()
+
+        if row:
+            row = dict(row)
+
+            if row.get("created_at"):
+                row["created_at"] = str(
+                    row["created_at"]
+                )
+
+         return row 
  
     finally: 
  
