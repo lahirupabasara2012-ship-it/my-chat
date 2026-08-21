@@ -318,10 +318,15 @@ function connectSocket() {
         upgrade: true,
         reconnection: true,
         reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 3000,
         timeout: 20000
     });
+
+
+    // =====================================================
+    // SOCKET CONNECTED
+    // =====================================================
 
     socket.on("connect", function () {
 
@@ -330,35 +335,85 @@ function connectSocket() {
             socket.id
         );
 
-        // Update status
+
         const status =
             document.getElementById("chatStatus");
 
+
         if (status && selectedContact) {
+
             status.textContent =
                 selectedContact.email;
+
         }
+
+
+        /*
+         * If a message was waiting while the socket
+         * was connecting, send it now.
+         */
+
+        if (window.pendingMessage) {
+
+            const pending =
+                window.pendingMessage;
+
+            window.pendingMessage = null;
+
+
+            console.log(
+                "Sending pending message..."
+            );
+
+
+            socket.emit(
+                "send_message",
+                {
+                    receiver_id:
+                        Number(pending.receiver_id),
+
+                    message:
+                        pending.message
+                }
+            );
+
+        }
+
     });
 
-    socket.on("connect_error", function(error) {
 
-        console.error(
-            "Socket.IO connection error:",
-            error
-        );
+    // =====================================================
+    // SOCKET CONNECTION ERROR
+    // =====================================================
 
-        console.log(
-            "Socket.IO will automatically reconnect..."
-        );
-    });
+    socket.on(
+        "connect_error",
+        function(error) {
 
-    socket.on("disconnect", function(reason) {
+            console.error(
+                "Socket.IO connection error:",
+                error
+            );
 
-        console.log(
-            "Socket.IO disconnected:",
-            reason
-        );
-    });
+        }
+    );
+
+
+    // =====================================================
+    // SOCKET DISCONNECT
+    // =====================================================
+
+    socket.on(
+        "disconnect",
+        function(reason) {
+
+            console.log(
+                "Socket.IO disconnected:",
+                reason
+            );
+
+        }
+    );
 
 
     // =====================================================
@@ -374,9 +429,11 @@ function connectSocket() {
                 message
             );
 
+
             if (!message) {
                 return;
             }
+
 
             if (
                 selectedContact &&
@@ -384,10 +441,15 @@ function connectSocket() {
                 Number(message.receiver_id)
             ) {
 
-                addMessageToScreen(message);
+                addMessageToScreen(
+                    message
+                );
+
             }
 
+
             loadContacts();
+
         }
     );
 
@@ -396,135 +458,163 @@ function connectSocket() {
     // NEW MESSAGE
     // =====================================================
 
-socket.on("new_message", async function(message) {
+    socket.on(
+        "new_message",
+        async function(message) {
 
-    console.log("NEW MESSAGE:", message);
-
-    if (!message) {
-        return;
-    }
-
-    const senderId = Number(message.sender_id);
-
-    // ==========================================
-    // CURRENT CHAT IS ALREADY OPEN
-    // ==========================================
-
-    if (
-        selectedContact &&
-        Number(selectedContact.id) === senderId
-    ) {
-
-        addMessageToScreen(message);
-
-        try {
-
-            await fetch(
-                "/api/messages/" +
-                senderId +
-                "/read",
-                {
-                    method: "POST"
-                }
+            console.log(
+                "NEW MESSAGE:",
+                message
             );
 
-        } catch (error) {
 
-            console.error(
-                "Read status error:",
-                error
+            if (!message) {
+                return;
+            }
+
+
+            const senderId =
+                Number(message.sender_id);
+
+
+            // =============================================
+            // CURRENT CHAT OPEN
+            // =============================================
+
+            if (
+                selectedContact &&
+                Number(selectedContact.id) ===
+                senderId
+            ) {
+
+                addMessageToScreen(
+                    message
+                );
+
+
+                try {
+
+                    await fetch(
+                        "/api/messages/" +
+                        senderId +
+                        "/read",
+                        {
+                            method: "POST"
+                        }
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Read status error:",
+                        error
+                    );
+
+                }
+
+
+                loadContacts();
+
+                return;
+
+            }
+
+
+            // =============================================
+            // MESSAGE FROM OTHER CONTACT
+            // =============================================
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/user/" +
+                        senderId
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    data.success &&
+                    data.user
+                ) {
+
+                    const sender =
+                        data.user;
+
+
+                    const existingContact =
+                        document.querySelector(
+                            '.contact[data-id="' +
+                            sender.id +
+                            '"]'
+                        );
+
+
+                    if (!existingContact) {
+
+                        createTemporaryContact(
+                            sender,
+                            message
+                        );
+
+                    }
+
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Could not get sender:",
+                    error
+                );
+
+            }
+
+
+            loadContacts();
+
+
+            showNotification(
+                "New message received"
             );
 
         }
-
-        loadContacts();
-
-        return;
-    }
+    );
 
 
-    // ==========================================
-    // MESSAGE FROM SOMEONE WHO IS NOT
-    // CURRENTLY SELECTED
-    // ==========================================
+    // =====================================================
+    // MESSAGE ERROR
+    // =====================================================
 
-    try {
+    socket.on(
+        "message_error",
+        function(data) {
 
-        // Get sender information
-        const response = await fetch(
-            "/api/user/" + senderId
-        );
-
-        const data = await response.json();
-
-        if (data.success && data.user) {
-
-            const sender = data.user;
-
-            /*
-             * Check whether sender already exists
-             * in our contact list.
-             */
-
-            const existingContact =
-                document.querySelector(
-                    '.contact[data-id="' +
-                    sender.id +
-                    '"]'
-                );
+            console.error(
+                "MESSAGE ERROR:",
+                data
+            );
 
 
-            // ======================================
-            // NOT A CONTACT
-            // ======================================
+            if (
+                data &&
+                data.message
+            ) {
 
-            if (!existingContact) {
-
-                console.log(
-                    "Message received from non-contact:",
-                    sender
-                );
-
-                /*
-                 * Create temporary contact.
-                 * This lets the user open the chat
-                 * even though they haven't added
-                 * the sender.
-                 */
-
-                createTemporaryContact(
-                    sender,
-                    message
+                showNotification(
+                    data.message
                 );
 
             }
 
         }
-
-    } catch (error) {
-
-        console.error(
-            "Could not get sender:",
-            error
-        );
-
-    }
-
-
-    // Refresh normal contacts
-    loadContacts();
-
-
-    // Notification
-    showNotification(
-        "New message received"
     );
 
-});
-
-
 }
-
 
 /* =====================================================
    AUTH UI
