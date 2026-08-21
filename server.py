@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
-    "SECRET_KEY",
+    "MyChat_2026_Secure_Key_9xK7pL2mQ8zR",
     "dev-secret-key"
 )
 
