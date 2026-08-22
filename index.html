@@ -165,6 +165,10 @@
         </div>
 
 
+        <div class="sidebar-actions">
+        <button class="add-contact-btn" onclick="openProfileModal()">👤 Profile</button>
+        <button class="add-contact-btn" onclick="openGroupModal()">👥 New Group</button>
+        </div>
         <button
             class="add-contact-btn"
             id="addContactBtn"
@@ -334,11 +338,8 @@
             Enter your friend's email address
         </p>
 
-        <input
-            type="email"
-            id="emailInput"
-            placeholder="friend@example.com"
-        >
+        <input type="email" id="emailInput" placeholder="friend@example.com">
+        <input type="text" id="contactNameInput" placeholder="Save as name (optional)">
 
         <button
             class="confirm-btn"
@@ -3740,5 +3741,39 @@ checkLogin();
 
 </script>
 
+
+<script>
+/* ===== GROUP / PROFILE / CUSTOM CONTACT UPGRADE ===== */
+let selectedGroup = null;
+let loadedContacts = [];
+const esc = v => String(v ?? '').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function avatarHTML(item){ return item.profile_photo || item.photo ? `<img src="${esc(item.profile_photo||item.photo)}" alt="">` : esc((item.name||'?').charAt(0).toUpperCase()); }
+
+async function loadContactsUpgrade(){
+  try{ const [cr,gr]=await Promise.all([fetch('/api/contacts'),fetch('/api/groups')]); const cd=await cr.json(), gd=await gr.json();
+    if(cd.success) loadedContacts=cd.contacts||[];
+    const box=document.getElementById('contacts'); if(!box)return; box.innerHTML='';
+    if(gd.success && gd.groups?.length){ box.insertAdjacentHTML('beforeend','<div class="list-title">GROUPS</div>'); gd.groups.forEach(g=>{const d=document.createElement('div');d.className='contact group-contact';d.dataset.groupId=g.id;d.innerHTML=`<div class="avatar">${avatarHTML(g)}</div><div class="contact-info"><b>${esc(g.name)}</b><span>${g.member_count} members</span></div>`;d.onclick=()=>selectGroup(g);box.appendChild(d)}); }
+    box.insertAdjacentHTML('beforeend','<div class="list-title">CONTACTS</div>');
+    if(cd.success) cd.contacts.forEach(c=>{const d=document.createElement('div');d.className='contact';d.dataset.id=c.id;d.innerHTML=`<div class="avatar">${avatarHTML(c)}</div><div class="contact-info"><b>${esc(c.name)}</b><span>${esc(c.last_message||c.email||'')}</span></div>${Number(c.unread_count||0)?`<span class="unread-badge">${c.unread_count}</span>`:''}`;d.onclick=()=>{selectedGroup=null; selectedContact=c; selectContact(c)};box.appendChild(d)});
+  }catch(e){console.error(e)}
+}
+async function selectGroup(g){selectedGroup=g;selectedContact=null;document.querySelectorAll('.contact').forEach(x=>x.classList.remove('active'));document.querySelector(`[data-group-id="${g.id}"]`)?.classList.add('active');document.getElementById('chatName').textContent=g.name;document.getElementById('chatStatus').textContent=`${g.member_count||''} members`;const av=document.getElementById('chatAvatar');av.innerHTML=avatarHTML(g);document.getElementById('messageInput').disabled=false;document.getElementById('sendBtn').disabled=false;document.getElementById('fileBtn').disabled=true;const r=await fetch('/api/groups/'+g.id+'/messages');const d=await r.json();const box=document.getElementById('messages');box.innerHTML='';(d.messages||[]).forEach(addGroupMessage);scrollMessages();}
+function addGroupMessage(m){if(!selectedGroup||Number(m.group_id)!==Number(selectedGroup.id))return; if(document.querySelector(`.message[data-group-message-id="${m.id}"]`))return;const own=currentUser&&Number(m.sender_id)===Number(currentUser.id);const d=document.createElement('div');d.className='message '+(own?'sent':'received');d.dataset.groupMessageId=m.id;d.innerHTML=`${own?'':`<div class="group-sender">${esc(m.sender_name)}</div>`}<div class="bubble">${esc(m.message)}</div><div class="message-time">${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;document.getElementById('messages').appendChild(d);scrollMessages();}
+const oldSendMessage=window.sendMessage;
+window.sendMessage=function(){if(!selectedGroup)return oldSendMessage();const input=document.getElementById('messageInput'),text=input.value.trim();if(!text)return;if(!socket||!socket.connected){showNotification?.('Connecting...');return}socket.emit('send_group_message',{group_id:Number(selectedGroup.id),message:text});input.value=''};
+function openProfileModal(){document.getElementById('profileModal').classList.add('show');fetch('/api/profile').then(r=>r.json()).then(d=>{if(d.user){document.getElementById('profilePreview').innerHTML=avatarHTML(d.user)}})}
+function closeUpgradeModal(id){document.getElementById(id).classList.remove('show')}
+async function uploadProfilePhoto(){const f=document.getElementById('profilePhotoInput').files[0];if(!f)return;const fd=new FormData();fd.append('photo',f);const d=await (await fetch('/api/profile',{method:'POST',body:fd})).json();if(d.success){document.getElementById('profilePreview').innerHTML=`<img src="${d.profile_photo}">`;loadContactsUpgrade();closeUpgradeModal('profileModal')}}
+function openGroupModal(){const box=document.getElementById('groupMemberList');box.innerHTML=loadedContacts.map(c=>`<label><input type="checkbox" value="${c.id}"> ${esc(c.name)}</label>`).join('')||'No contacts yet';document.getElementById('groupModal').classList.add('show')}
+async function createGroup(){const name=document.getElementById('groupNameInput').value.trim();const members=[...document.querySelectorAll('#groupMemberList input:checked')].map(x=>x.value);if(!name){document.getElementById('groupMessage').textContent='Enter a group name';return}const fd=new FormData();fd.append('name',name);fd.append('member_ids',members.join(','));const f=document.getElementById('groupPhotoInput').files[0];if(f)fd.append('photo',f);const d=await (await fetch('/api/groups',{method:'POST',body:fd})).json();if(d.success){closeUpgradeModal('groupModal');await loadContactsUpgrade();selectGroup(d.group)}else document.getElementById('groupMessage').textContent=d.message||'Could not create group'}
+const oldAddContact=window.addContact;
+window.addContact=async function(){const email=document.getElementById('emailInput').value.trim(), custom=document.getElementById('contactNameInput').value.trim();if(!email)return showContactMessage('Enter an email address.','red');const r=await fetch('/api/add-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,custom_name:custom})});const d=await r.json();if(d.success){showContactMessage('Contact saved successfully!','green');document.getElementById('emailInput').value='';document.getElementById('contactNameInput').value='';await loadContactsUpgrade();setTimeout(()=>modal.classList.remove('show'),500)}else showContactMessage(d.message||'Could not add contact.','red')}
+function setupUpgradeSocket(){if(!socket)return;socket.on('new_group_message',m=>{if(selectedGroup&&Number(selectedGroup.id)===Number(m.group_id))addGroupMessage(m);loadContactsUpgrade()});socket.on('group_created',()=>loadContactsUpgrade())}
+const oldConnectSocket=window.connectSocket;
+window.connectSocket=function(){oldConnectSocket();setTimeout(setupUpgradeSocket,300)};
+window.loadContacts=loadContactsUpgrade;
+window.addEventListener('load',()=>setTimeout(loadContactsUpgrade,800));
+</script>
 </body>
 </html>
