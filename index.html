@@ -13,9 +13,9 @@
 
 <body>
 
-<!-- =========================
+<!-- =========================================================
      AUTH PAGE
-========================= -->
+========================================================= -->
 
 <div class="auth-page" id="authPage">
 
@@ -26,6 +26,7 @@
         <p class="auth-subtitle">
             Simple private messaging
         </p>
+
 
         <!-- LOGIN -->
 
@@ -45,20 +46,29 @@
                 placeholder="Password"
             >
 
-            <button onclick="login()" title="Login">
+            <button
+                onclick="login()"
+                title="Login"
+            >
                 ➔ Login
             </button>
 
             <p class="switch-text">
                 Don't have an account?
-                <span onclick="showSignup()">Sign Up</span>
+                <span onclick="showSignup()">
+                    Sign Up
+                </span>
             </p>
 
         </div>
 
+
         <!-- SIGNUP -->
 
-        <div id="signupForm" style="display:none;">
+        <div
+            id="signupForm"
+            style="display:none;"
+        >
 
             <h2>Create Account</h2>
 
@@ -80,16 +90,22 @@
                 placeholder="Password"
             >
 
-            <button onclick="signup()" title="Create Account">
+            <button
+                onclick="signup()"
+                title="Create Account"
+            >
                 👤 Create Account
             </button>
 
             <p class="switch-text">
                 Already have an account?
-                <span onclick="showLogin()">Login</span>
+                <span onclick="showLogin()">
+                    Login
+                </span>
             </p>
 
         </div>
+
 
         <p id="authMessage"></p>
 
@@ -98,13 +114,20 @@
 </div>
 
 
-<!-- =========================
+<!-- =========================================================
      CHAT APP
-========================= -->
+========================================================= -->
 
-<div class="app" id="chatApp" style="display:none;">
+<div
+    class="app"
+    id="chatApp"
+    style="display:none;"
+>
 
-    <!-- SIDEBAR -->
+
+    <!-- =====================================================
+         SIDEBAR
+    ====================================================== -->
 
     <aside class="sidebar">
 
@@ -122,10 +145,14 @@
 
         </div>
 
+
         <div class="current-user">
+
             Logged in as:
             <b id="currentUserName"></b>
+
         </div>
+
 
         <div class="search-box">
 
@@ -137,6 +164,7 @@
 
         </div>
 
+
         <button
             class="add-contact-btn"
             id="addContactBtn"
@@ -144,6 +172,7 @@
         >
             ➕ Add Contact
         </button>
+
 
         <div
             class="contacts"
@@ -153,9 +182,15 @@
     </aside>
 
 
-    <!-- CHAT -->
+
+    <!-- =====================================================
+         CHAT
+    ====================================================== -->
 
     <main class="chat">
+
+
+        <!-- CHAT HEADER -->
 
         <header class="chat-header">
 
@@ -165,8 +200,8 @@
                     class="avatar"
                     id="chatAvatar"
                 >
-                    
                 </div>
+
 
                 <div>
 
@@ -175,7 +210,6 @@
                     </h2>
 
                     <p id="chatStatus">
-                        
                     </p>
 
                 </div>
@@ -185,7 +219,10 @@
         </header>
 
 
-        <!-- MESSAGES -->
+
+        <!-- =================================================
+             MESSAGES
+        ================================================== -->
 
         <div
             class="messages"
@@ -199,7 +236,32 @@
         </div>
 
 
-        <!-- MESSAGE AREA -->
+
+        <!-- =================================================
+             TYPING INDICATOR
+        ================================================== -->
+
+        <div
+            id="typingIndicator"
+            class="typing-indicator"
+            style="display:none;"
+        >
+            <span id="typingText">
+                Typing...
+            </span>
+
+            <span class="typing-dots">
+                <i></i>
+                <i></i>
+                <i></i>
+            </span>
+        </div>
+
+
+
+        <!-- =================================================
+             MESSAGE AREA
+        ================================================== -->
 
         <div class="message-area">
 
@@ -212,6 +274,7 @@
                 📎
             </button>
 
+
             <input
                 type="file"
                 id="fileInput"
@@ -219,12 +282,15 @@
                 accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
             >
 
+
             <input
                 type="text"
                 id="messageInput"
                 placeholder="Type a message..."
                 disabled
+                autocomplete="off"
             >
+
 
             <button
                 class="send-btn"
@@ -242,9 +308,10 @@
 </div>
 
 
-<!-- =========================
+
+<!-- =========================================================
      ADD CONTACT MODAL
-========================= -->
+========================================================= -->
 
 <div
     class="modal"
@@ -291,138 +358,283 @@
 </div>
 
 
+
+<!-- =========================================================
+     NOTIFICATION
+========================================================= -->
+
+<div
+    id="notification"
+    class="chat-notification"
+    style="display:none;"
+>
+    <span id="notificationText"></span>
+</div>
+
+
+
 <script>
 
-/* =====================================================
+/* =========================================================
    GLOBAL VARIABLES
-===================================================== */
+========================================================= */
 
 let currentUser = null;
+
 let selectedContact = null;
+
 let socket = null;
 
+let typingTimer = null;
 
-/* =====================================================
+let isTyping = false;
+
+let typingUserId = null;
+
+let notificationPermissionAsked = false;
+
+
+/* =========================================================
    SOCKET.IO
-===================================================== */
+========================================================= */
 
 function connectSocket() {
 
     if (socket) {
+
         try {
+
             socket.removeAllListeners();
+
             socket.disconnect();
+
         } catch (e) {}
+
     }
 
-    console.log("Connecting to chat server...");
+
+    console.log(
+        "Connecting to chat server..."
+    );
+
 
     socket = io("/", {
-        transports: ["websocket", "polling"],
+
+        transports: [
+            "websocket",
+            "polling"
+        ],
+
         upgrade: true,
+
         reconnection: true,
+
         reconnectionAttempts: Infinity,
+
         reconnectionDelay: 500,
+
         reconnectionDelayMax: 3000,
+
         timeout: 20000
-    });
-
-
-    // =====================================================
-    // SOCKET CONNECTED
-    // =====================================================
-
-    socket.on("connect", function () {
-
-        console.log(
-            "Socket.IO connected:",
-            socket.id
-        );
-
-
-        const status =
-            document.getElementById("chatStatus");
-
-
-        if (status && selectedContact) {
-
-            status.textContent =
-                selectedContact.email;
-
-        }
-
-
-        /*
-         * If a message was waiting while the socket
-         * was connecting, send it now.
-         */
-
-        if (window.pendingMessage) {
-
-            const pending =
-                window.pendingMessage;
-
-            window.pendingMessage = null;
-
-
-            console.log(
-                "Sending pending message..."
-            );
-
-
-            socket.emit(
-                "send_message",
-                {
-                    receiver_id:
-                        Number(pending.receiver_id),
-
-                    message:
-                        pending.message
-                }
-            );
-
-        }
 
     });
 
 
-    // =====================================================
-    // SOCKET CONNECTION ERROR
-    // =====================================================
+
+    /* =====================================================
+       CONNECTED
+    ===================================================== */
 
     socket.on(
-        "connect_error",
-        function(error) {
+        "connect",
+        function() {
 
-            console.error(
-                "Socket.IO connection error:",
-                error
+            console.log(
+                "Socket.IO connected:",
+                socket.id
             );
+
+
+            updateSelectedContactStatus();
+
+
+            /*
+             * Pending message
+             */
+
+            if (window.pendingMessage) {
+
+                const pending =
+                    window.pendingMessage;
+
+                window.pendingMessage =
+                    null;
+
+
+                socket.emit(
+                    "send_message",
+                    {
+                        receiver_id:
+                            Number(
+                                pending.receiver_id
+                            ),
+
+                        message:
+                            pending.message
+                    }
+                );
+
+            }
 
         }
     );
 
 
-    // =====================================================
-    // SOCKET DISCONNECT
-    // =====================================================
+
+    /* =====================================================
+       ONLINE USERS
+    ===================================================== */
 
     socket.on(
-        "disconnect",
-        function(reason) {
+        "online_users",
+        function(data) {
 
-            console.log(
-                "Socket.IO disconnected:",
-                reason
-            );
+            if (!data) {
+                return;
+            }
+
+
+            const users =
+                data.users || [];
+
+
+            document
+                .querySelectorAll(
+                    ".contact"
+                )
+                .forEach(
+                    function(contact) {
+
+                        const id =
+                            Number(
+                                contact.dataset.id
+                            );
+
+
+                        updateContactOnlineUI(
+                            id,
+                            users.includes(id)
+                        );
+
+                    }
+                );
+
+
+            updateSelectedContactStatus();
 
         }
     );
 
 
-    // =====================================================
-    // MESSAGE SENT
-    // =====================================================
+
+    /* =====================================================
+       USER STATUS
+    ===================================================== */
+
+    socket.on(
+        "user_status",
+        function(data) {
+
+            if (!data) {
+                return;
+            }
+
+
+            const userId =
+                Number(
+                    data.user_id
+                );
+
+
+            updateContactOnlineUI(
+                userId,
+                Boolean(
+                    data.online
+                )
+            );
+
+
+            if (
+                selectedContact &&
+                Number(
+                    selectedContact.id
+                ) === userId
+            ) {
+
+                updateSelectedContactStatus(
+                    Boolean(
+                        data.online
+                    )
+                );
+
+            }
+
+        }
+    );
+
+
+
+    /* =====================================================
+       TYPING
+    ===================================================== */
+
+    socket.on(
+        "user_typing",
+        function(data) {
+
+            if (!data) {
+                return;
+            }
+
+
+            const userId =
+                Number(
+                    data.user_id
+                );
+
+
+            if (
+                !selectedContact ||
+                Number(
+                    selectedContact.id
+                ) !== userId
+            ) {
+
+                return;
+
+            }
+
+
+            if (data.typing) {
+
+                showTypingIndicator(
+                    selectedContact.name
+                );
+
+            } else {
+
+                hideTypingIndicator();
+
+            }
+
+        }
+    );
+
+
+
+    /* =====================================================
+       MESSAGE SENT
+    ===================================================== */
 
     socket.on(
         "message_sent",
@@ -439,10 +651,24 @@ function connectSocket() {
             }
 
 
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT immediately add the
+             * message twice.
+             *
+             * Server sends message_sent
+             * only to sender.
+             */
+
             if (
                 selectedContact &&
-                Number(selectedContact.id) ===
-                Number(message.receiver_id)
+                Number(
+                    selectedContact.id
+                ) ===
+                Number(
+                    message.receiver_id
+                )
             ) {
 
                 addMessageToScreen(
@@ -458,9 +684,74 @@ function connectSocket() {
     );
 
 
-    // =====================================================
-    // NEW MESSAGE
-    // =====================================================
+
+    /* =====================================================
+       MESSAGE DELIVERED
+    ===================================================== */
+
+    socket.on(
+        "message_delivered",
+        function(data) {
+
+            if (!data) {
+                return;
+            }
+
+
+            console.log(
+                "MESSAGE DELIVERED:",
+                data
+            );
+
+
+            updateMessageStatus(
+                data.message_id,
+                "delivered"
+            );
+
+        }
+    );
+
+
+
+    /* =====================================================
+       MESSAGES READ
+    ===================================================== */
+
+    socket.on(
+        "messages_read",
+        function(data) {
+
+            if (!data) {
+                return;
+            }
+
+
+            const contactId =
+                Number(
+                    data.contact_id
+                );
+
+
+            if (
+                selectedContact &&
+                Number(
+                    selectedContact.id
+                ) === contactId
+            ) {
+
+                markVisibleMessagesAsSeen();
+
+            }
+
+        }
+    );
+
+
+
+    /* =====================================================
+       NEW MESSAGE
+    ===================================================== */
 
     socket.on(
         "new_message",
@@ -478,23 +769,30 @@ function connectSocket() {
 
 
             const senderId =
-                Number(message.sender_id);
+                Number(
+                    message.sender_id
+                );
 
 
-            // =============================================
-            // CURRENT CHAT OPEN
-            // =============================================
+            /*
+             * CURRENT CHAT OPEN
+             */
 
             if (
                 selectedContact &&
-                Number(selectedContact.id) ===
-                senderId
+                Number(
+                    selectedContact.id
+                ) === senderId
             ) {
 
                 addMessageToScreen(
                     message
                 );
 
+
+                /*
+                 * Mark as read immediately.
+                 */
 
                 try {
 
@@ -506,6 +804,19 @@ function connectSocket() {
                             method: "POST"
                         }
                     );
+
+
+                    if (socket) {
+
+                        socket.emit(
+                            "mark_read",
+                            {
+                                contact_id:
+                                    senderId
+                            }
+                        );
+
+                    }
 
                 } catch (error) {
 
@@ -519,14 +830,16 @@ function connectSocket() {
 
                 loadContacts();
 
+
                 return;
 
             }
 
 
-            // =============================================
-            // MESSAGE FROM OTHER CONTACT
-            // =============================================
+
+            /*
+             * MESSAGE FROM OTHER CONTACT
+             */
 
             try {
 
@@ -582,17 +895,33 @@ function connectSocket() {
             loadContacts();
 
 
+            /*
+             * Notification
+             */
+
             showNotification(
-                "New message received"
+                "New message from " +
+                (
+                    selectedContact &&
+                    Number(
+                        selectedContact.id
+                    ) === senderId
+                        ? selectedContact.name
+                        : "a contact"
+                )
             );
+
+
+            playNotificationSound();
 
         }
     );
 
 
-    // =====================================================
-    // MESSAGE ERROR
-    // =====================================================
+
+    /* =====================================================
+       MESSAGE ERROR
+    ===================================================== */
 
     socket.on(
         "message_error",
@@ -618,44 +947,117 @@ function connectSocket() {
         }
     );
 
+
+
+    /* =====================================================
+       CONNECTION ERROR
+    ===================================================== */
+
+    socket.on(
+        "connect_error",
+        function(error) {
+
+            console.error(
+                "Socket.IO connection error:",
+                error
+            );
+
+        }
+    );
+
+
+
+    /* =====================================================
+       DISCONNECT
+    ===================================================== */
+
+    socket.on(
+        "disconnect",
+        function(reason) {
+
+            console.log(
+                "Socket.IO disconnected:",
+                reason
+            );
+
+
+            /*
+             * If chat is open,
+             * show temporary offline state.
+             */
+
+            if (selectedContact) {
+
+                const status =
+                    document.getElementById(
+                        "chatStatus"
+                    );
+
+
+                if (status) {
+
+                    status.textContent =
+                        "Connecting...";
+
+                }
+
+            }
+
+        }
+    );
+
 }
 
-/* =====================================================
+
+
+/* =========================================================
    AUTH UI
-===================================================== */
+========================================================= */
 
 function showLogin() {
 
     document.getElementById(
         "loginForm"
-    ).style.display = "block";
+    ).style.display =
+        "block";
+
 
     document.getElementById(
         "signupForm"
-    ).style.display = "none";
+    ).style.display =
+        "none";
+
 
     document.getElementById(
         "authMessage"
-    ).textContent = "";
+    ).textContent =
+        "";
 
 }
+
 
 
 function showSignup() {
 
     document.getElementById(
         "loginForm"
-    ).style.display = "none";
+    ).style.display =
+        "none";
+
 
     document.getElementById(
         "signupForm"
-    ).style.display = "block";
+    ).style.display =
+        "block";
+
 
     document.getElementById(
         "authMessage"
-    ).textContent = "";
+    ).textContent =
+        "";
 
 }
+
 
 
 function showAuthMessage(
@@ -668,8 +1070,10 @@ function showAuthMessage(
             "authMessage"
         );
 
+
     element.textContent =
         message;
+
 
     element.style.color =
         color;
@@ -677,9 +1081,10 @@ function showAuthMessage(
 }
 
 
-/* =====================================================
+
+/* =========================================================
    SIGNUP
-===================================================== */
+========================================================= */
 
 async function signup() {
 
@@ -688,10 +1093,12 @@ async function signup() {
             "signupName"
         ).value.trim();
 
+
     const email =
         document.getElementById(
             "signupEmail"
         ).value.trim();
+
 
     const password =
         document.getElementById(
@@ -699,7 +1106,11 @@ async function signup() {
         ).value;
 
 
-    if (!name || !email || !password) {
+    if (
+        !name ||
+        !email ||
+        !password
+    ) {
 
         showAuthMessage(
             "Please fill all fields.",
@@ -724,11 +1135,17 @@ async function signup() {
                             "application/json"
                     },
 
-                    body: JSON.stringify({
-                        name: name,
-                        email: email,
-                        password: password
-                    })
+                    body:
+                        JSON.stringify({
+                            name:
+                                name,
+
+                            email:
+                                email,
+
+                            password:
+                                password
+                        })
                 }
             );
 
@@ -744,17 +1161,21 @@ async function signup() {
                 "green"
             );
 
+
             document.getElementById(
                 "signupName"
             ).value = "";
+
 
             document.getElementById(
                 "signupEmail"
             ).value = "";
 
+
             document.getElementById(
                 "signupPassword"
             ).value = "";
+
 
             setTimeout(
                 showLogin,
@@ -772,7 +1193,10 @@ async function signup() {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
 
         showAuthMessage(
             "Server connection error.",
@@ -784,9 +1208,10 @@ async function signup() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    LOGIN
-===================================================== */
+========================================================= */
 
 async function login() {
 
@@ -795,13 +1220,17 @@ async function login() {
             "loginEmail"
         ).value.trim();
 
+
     const password =
         document.getElementById(
             "loginPassword"
         ).value;
 
 
-    if (!email || !password) {
+    if (
+        !email ||
+        !password
+    ) {
 
         showAuthMessage(
             "Enter your email and password.",
@@ -826,10 +1255,14 @@ async function login() {
                             "application/json"
                     },
 
-                    body: JSON.stringify({
-                        email: email,
-                        password: password
-                    })
+                    body:
+                        JSON.stringify({
+                            email:
+                                email,
+
+                            password:
+                                password
+                        })
                 }
             );
 
@@ -846,11 +1279,14 @@ async function login() {
 
             document.getElementById(
                 "authPage"
-            ).style.display = "none";
+            ).style.display =
+                "none";
+
 
             document.getElementById(
                 "chatApp"
-            ).style.display = "flex";
+            ).style.display =
+                "flex";
 
 
             document.getElementById(
@@ -859,10 +1295,8 @@ async function login() {
                 currentUser.name;
 
 
-            /*
-               IMPORTANT:
-               Connect Socket.IO AFTER login.
-            */
+            requestNotificationPermission();
+
 
             connectSocket();
 
@@ -880,7 +1314,10 @@ async function login() {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
 
         showAuthMessage(
             "Server connection error.",
@@ -892,9 +1329,10 @@ async function login() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    CHECK LOGIN
-===================================================== */
+========================================================= */
 
 async function checkLogin() {
 
@@ -918,11 +1356,14 @@ async function checkLogin() {
 
             document.getElementById(
                 "authPage"
-            ).style.display = "none";
+            ).style.display =
+                "none";
+
 
             document.getElementById(
                 "chatApp"
-            ).style.display = "flex";
+            ).style.display =
+                "flex";
 
 
             document.getElementById(
@@ -931,11 +1372,8 @@ async function checkLogin() {
                 currentUser.name;
 
 
-            /*
-               IMPORTANT:
-               Connect Socket.IO only after
-               the login session is known.
-            */
+            requestNotificationPermission();
+
 
             connectSocket();
 
@@ -956,15 +1394,20 @@ async function checkLogin() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    LOGOUT
-===================================================== */
+========================================================= */
 
 async function logout() {
 
     if (socket) {
 
-        socket.disconnect();
+        try {
+
+            socket.disconnect();
+
+        } catch (e) {}
 
         socket = null;
 
@@ -982,43 +1425,55 @@ async function logout() {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
 
     }
 
 
     currentUser = null;
+
     selectedContact = null;
 
 
     document.getElementById(
         "chatApp"
-    ).style.display = "none";
+    ).style.display =
+        "none";
 
 
     document.getElementById(
         "authPage"
-    ).style.display = "flex";
+    ).style.display =
+        "flex";
 
 
     document.getElementById(
         "messageInput"
-    ).value = "";
+    ).value =
+        "";
 
 
     document.getElementById(
         "messageInput"
-    ).disabled = true;
+    ).disabled =
+        true;
 
 
     document.getElementById(
         "sendBtn"
-    ).disabled = true;
+    ).disabled =
+        true;
 
 
     document.getElementById(
         "fileBtn"
-    ).disabled = true;
+    ).disabled =
+        true;
+
+
+    hideTypingIndicator();
 
 
     showLogin();
@@ -1026,9 +1481,10 @@ async function logout() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    LOAD CONTACTS
-===================================================== */
+========================================================= */
 
 async function loadContacts() {
 
@@ -1055,7 +1511,8 @@ async function loadContacts() {
         }
 
 
-        container.innerHTML = "";
+        container.innerHTML =
+            "";
 
 
         if (!data.success) {
@@ -1084,127 +1541,16 @@ async function loadContacts() {
         data.contacts.forEach(
             function(contact) {
 
-                const div =
-                    document.createElement(
-                        "div"
-                    );
-
-
-                div.className =
-                    "contact";
-
-
-                div.dataset.id =
-                    contact.id;
-
-
-                // ==========================================
-                // HIGHLIGHT CURRENT CHAT
-                // ==========================================
-
-                if (
-                    selectedContact &&
-                    Number(selectedContact.id) ===
-                    Number(contact.id)
-                ) {
-
-                    div.classList.add(
-                        "active"
-                    );
-
-                }
-
-
-                const firstLetter =
-                    contact.name
-                    .charAt(0)
-                    .toUpperCase();
-
-
-                const unread =
-                    Number(
-                        contact.unread_count ||
-                        contact.unread ||
-                        0
-                    );
-
-
-                let unreadBadge = "";
-
-
-                if (unread > 0) {
-
-                    unreadBadge = `
-                        <span class="unread-badge">
-                            ${
-                                unread > 99
-                                ? "99"
-                                : unread
-                            }
-                        </span>
-                    `;
-
-                }
-
-
-                // ==========================================
-                // LAST MESSAGE PREVIEW
-                // ==========================================
-
-                let preview =
-                    contact.last_message ||
-                    contact.email ||
-                    "";
-
-
-                div.innerHTML = `
-
-                    <div class="avatar">
-                        ${escapeHtml(firstLetter)}
-                    </div>
-
-                    <div class="contact-info">
-
-                        <div class="contact-name">
-                            ${escapeHtml(contact.name)}
-                        </div>
-
-                        <div class="last-message">
-                            ${escapeHtml(preview)}
-                        </div>
-
-                    </div>
-
-                    <div class="contact-right">
-                        ${unreadBadge}
-                    </div>
-
-                `;
-
-
-                // ==========================================
-                // OPEN CHAT
-                // ==========================================
-
-                div.addEventListener(
-                    "click",
-                    function() {
-
-                        selectContact(
-                            contact
-                        );
-
-                    }
-                );
-
-
-                container.appendChild(
-                    div
+                createContactElement(
+                    contact,
+                    container
                 );
 
             }
         );
 
+
+        updateSelectedContactStatus();
 
     } catch (error) {
 
@@ -1218,9 +1564,311 @@ async function loadContacts() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
+   CREATE CONTACT ELEMENT
+========================================================= */
+
+function createContactElement(
+    contact,
+    container
+) {
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+
+    div.className =
+        "contact";
+
+
+    div.dataset.id =
+        contact.id;
+
+
+    if (
+        selectedContact &&
+        Number(
+            selectedContact.id
+        ) ===
+        Number(
+            contact.id
+        )
+    ) {
+
+        div.classList.add(
+            "active"
+        );
+
+    }
+
+
+    const firstLetter =
+        contact.name
+        .charAt(0)
+        .toUpperCase();
+
+
+    const unread =
+        Number(
+            contact.unread_count ||
+            contact.unread ||
+            0
+        );
+
+
+    let unreadBadge =
+        "";
+
+
+    if (unread > 0) {
+
+        unreadBadge = `
+            <span class="unread-badge">
+                ${
+                    unread > 99
+                    ? "99"
+                    : unread
+                }
+            </span>
+        `;
+
+    }
+
+
+    const online =
+        Boolean(
+            contact.online
+        );
+
+
+    const statusDot =
+        online
+        ? `
+            <span
+                class="online-dot"
+                title="Online"
+            ></span>
+          `
+        : `
+            <span
+                class="offline-dot"
+                title="Offline"
+            ></span>
+          `;
+
+
+    let preview =
+        contact.last_message ||
+        contact.email ||
+        "";
+
+
+    div.innerHTML = `
+
+        <div class="avatar contact-avatar">
+
+            ${escapeHtml(firstLetter)}
+
+            ${statusDot}
+
+        </div>
+
+
+        <div class="contact-info">
+
+            <div class="contact-name">
+                ${escapeHtml(contact.name)}
+            </div>
+
+            <div class="last-message">
+                ${escapeHtml(preview)}
+            </div>
+
+        </div>
+
+
+        <div class="contact-right">
+
+            ${unreadBadge}
+
+        </div>
+
+    `;
+
+
+    div.addEventListener(
+        "click",
+        function() {
+
+            selectContact(
+                contact
+            );
+
+        }
+    );
+
+
+    container.appendChild(
+        div
+    );
+
+}
+
+
+
+/* =========================================================
+   CONTACT ONLINE UI
+========================================================= */
+
+function updateContactOnlineUI(
+    userId,
+    online
+) {
+
+    const contact =
+        document.querySelector(
+            '.contact[data-id="' +
+            userId +
+            '"]'
+        );
+
+
+    if (!contact) {
+        return;
+    }
+
+
+    const avatar =
+        contact.querySelector(
+            ".contact-avatar"
+        );
+
+
+    if (!avatar) {
+        return;
+    }
+
+
+    const oldDot =
+        avatar.querySelector(
+            ".online-dot, .offline-dot"
+        );
+
+
+    if (oldDot) {
+        oldDot.remove();
+    }
+
+
+    const dot =
+        document.createElement(
+            "span"
+        );
+
+
+    dot.className =
+        online
+        ? "online-dot"
+        : "offline-dot";
+
+
+    dot.title =
+        online
+        ? "Online"
+        : "Offline";
+
+
+    avatar.appendChild(
+        dot
+    );
+
+}
+
+
+
+/* =========================================================
+   UPDATE CHAT HEADER STATUS
+========================================================= */
+
+function updateSelectedContactStatus(
+    forcedStatus = null
+) {
+
+    if (!selectedContact) {
+        return;
+    }
+
+
+    const status =
+        document.getElementById(
+            "chatStatus"
+        );
+
+
+    if (!status) {
+        return;
+    }
+
+
+    if (
+        forcedStatus !== null
+    ) {
+
+        status.textContent =
+            forcedStatus
+            ? "Online"
+            : "Offline";
+
+        status.classList.toggle(
+            "online-status",
+            forcedStatus
+        );
+
+        return;
+
+    }
+
+
+    if (
+        typeof selectedContact.online !==
+        "undefined"
+    ) {
+
+        const online =
+            Boolean(
+                selectedContact.online
+            );
+
+
+        status.textContent =
+            online
+            ? "Online"
+            : "Offline";
+
+
+        status.classList.toggle(
+            "online-status",
+            online
+        );
+
+        return;
+
+    }
+
+
+    status.textContent =
+        selectedContact.email;
+
+}
+
+
+
+/* =========================================================
    SELECT CONTACT
-===================================================== */
+========================================================= */
 
 async function selectContact(
     contact
@@ -1237,12 +1885,6 @@ async function selectContact(
 
 
     document.getElementById(
-        "chatStatus"
-    ).textContent =
-        contact.email;
-
-
-    document.getElementById(
         "chatAvatar"
     ).textContent =
         contact.name
@@ -1250,29 +1892,53 @@ async function selectContact(
         .toUpperCase();
 
 
+    updateSelectedContactStatus();
+
+
     document.getElementById(
         "messageInput"
-    ).disabled = false;
+    ).disabled =
+        false;
 
 
     document.getElementById(
         "sendBtn"
-    ).disabled = false;
+    ).disabled =
+        false;
 
 
     document.getElementById(
         "fileBtn"
-    ).disabled = false;
+    ).disabled =
+        false;
 
 
-    await fetch(
-        "/api/messages/" +
-        contact.id +
-        "/read",
-        {
-            method: "POST"
-        }
-    );
+    hideTypingIndicator();
+
+
+    /*
+     * Mark messages read.
+     */
+
+    try {
+
+        await fetch(
+            "/api/messages/" +
+            contact.id +
+            "/read",
+            {
+                method: "POST"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Read error:",
+            error
+        );
+
+    }
 
 
     if (socket) {
@@ -1295,12 +1961,18 @@ async function selectContact(
 
     loadContacts();
 
+
+    document.getElementById(
+        "messageInput"
+    ).focus();
+
 }
 
 
-/* =====================================================
+
+/* =========================================================
    LOAD MESSAGES
-===================================================== */
+========================================================= */
 
 async function loadMessages(
     contactId
@@ -1325,7 +1997,8 @@ async function loadMessages(
             );
 
 
-        container.innerHTML = "";
+        container.innerHTML =
+            "";
 
 
         if (!data.success) {
@@ -1333,7 +2006,10 @@ async function loadMessages(
         }
 
 
-        if (data.messages.length === 0) {
+        if (
+            !data.messages ||
+            data.messages.length === 0
+        ) {
 
             container.innerHTML = `
                 <div class="empty-chat">
@@ -1361,6 +2037,9 @@ async function loadMessages(
 
         scrollMessages();
 
+
+        markVisibleMessagesAsSeen();
+
     } catch (error) {
 
         console.error(
@@ -1373,9 +2052,10 @@ async function loadMessages(
 }
 
 
-/* =====================================================
+
+/* =========================================================
    ADD MESSAGE
-===================================================== */
+========================================================= */
 
 function addMessageToScreen(
     message
@@ -1387,9 +2067,14 @@ function addMessageToScreen(
         );
 
 
+    if (!container) {
+        return;
+    }
+
+
     /*
-       Prevent duplicates
-    */
+     * Prevent duplicates.
+     */
 
     if (message.id) {
 
@@ -1402,16 +2087,27 @@ function addMessageToScreen(
 
 
         if (existing) {
+
+            /*
+             * Existing message may have
+             * received a new read status.
+             */
+
+            updateExistingMessageStatus(
+                existing,
+                message
+            );
+
             return;
+
         }
 
     }
 
 
     /*
-       Remove "No messages yet"
-       when first message arrives.
-    */
+     * Remove empty message.
+     */
 
     const empty =
         container.querySelector(
@@ -1430,20 +2126,19 @@ function addMessageToScreen(
         );
 
 
-    if (
-        Number(message.sender_id) ===
-        Number(currentUser.id)
-    ) {
+    const isMine =
+        Number(
+            message.sender_id
+        ) ===
+        Number(
+            currentUser.id
+        );
 
-        div.className =
-            "message sent";
 
-    } else {
-
-        div.className =
-            "message received";
-
-    }
+    div.className =
+        isMine
+        ? "message sent"
+        : "message received";
 
 
     if (message.id) {
@@ -1454,32 +2149,35 @@ function addMessageToScreen(
     }
 
 
-    let content = "";
+    let content =
+        "";
 
 
     /*
-       TEXT MESSAGE
-    */
+     * TEXT
+     */
 
     if (message.message) {
 
         content += `
-
             <div class="bubble">
-                ${escapeHtml(message.message)}
+                ${escapeHtml(
+                    message.message
+                )}
             </div>
-
         `;
 
     }
 
 
+
     /*
-       IMAGE
-    */
+     * IMAGE
+     */
 
     if (
-        message.message_type === "image"
+        message.message_type ===
+        "image"
     ) {
 
         content += `
@@ -1487,13 +2185,18 @@ function addMessageToScreen(
             <div class="file-message">
 
                 <img
-                    src="${escapeHtml(message.file_url)}"
+                    src="${escapeHtml(
+                        message.file_url
+                    )}"
                     class="chat-image"
                     onclick="openImage(this.src)"
                 >
 
                 <div class="file-name">
-                    ${escapeHtml(message.file_name)}
+                    ${escapeHtml(
+                        message.file_name ||
+                        "Image"
+                    )}
                 </div>
 
             </div>
@@ -1503,12 +2206,14 @@ function addMessageToScreen(
     }
 
 
+
     /*
-       VIDEO
-    */
+     * VIDEO
+     */
 
     else if (
-        message.message_type === "video"
+        message.message_type ===
+        "video"
     ) {
 
         content += `
@@ -1519,13 +2224,21 @@ function addMessageToScreen(
                     class="chat-video"
                     controls
                 >
+
                     <source
-                        src="${escapeHtml(message.file_url)}"
+                        src="${escapeHtml(
+                            message.file_url
+                        )}"
                     >
+
                 </video>
 
+
                 <div class="file-name">
-                    ${escapeHtml(message.file_name)}
+                    ${escapeHtml(
+                        message.file_name ||
+                        "Video"
+                    )}
                 </div>
 
             </div>
@@ -1535,12 +2248,14 @@ function addMessageToScreen(
     }
 
 
+
     /*
-       OTHER FILE
-    */
+     * FILE
+     */
 
     else if (
-        message.message_type === "file"
+        message.message_type ===
+        "file"
     ) {
 
         content += `
@@ -1548,12 +2263,18 @@ function addMessageToScreen(
             <div class="file-message">
 
                 <a
-                    href="${escapeHtml(message.file_url)}"
+                    href="${escapeHtml(
+                        message.file_url
+                    )}"
                     target="_blank"
                     download
                     class="file-download"
                 >
-                    ${escapeHtml(message.file_name)}
+                    📎
+                    ${escapeHtml(
+                        message.file_name ||
+                        "File"
+                    )}
                 </a>
 
             </div>
@@ -1563,11 +2284,67 @@ function addMessageToScreen(
     }
 
 
+
+    /*
+     * MESSAGE FOOTER
+     */
+
+    let statusHTML =
+        "";
+
+
+    if (isMine) {
+
+        let status =
+            "sent";
+
+
+        if (
+            Number(
+                message.is_read
+            ) === 1
+        ) {
+
+            status =
+                "seen";
+
+        }
+
+
+        statusHTML =
+            getMessageStatusHTML(
+                status
+            );
+
+    }
+
+
     content += `
 
-        <span class="time">
-            ${escapeHtml(message.created_at)}
-        </span>
+        <div class="message-footer">
+
+            <span class="time">
+                ${escapeHtml(
+                    formatMessageTime(
+                        message.created_at
+                    )
+                )}
+            </span>
+
+            ${
+                isMine
+                ? `
+                    <span
+                        class="message-status"
+                        data-status="${status}"
+                    >
+                        ${statusHTML}
+                    </span>
+                  `
+                : ""
+            }
+
+        </div>
 
     `;
 
@@ -1586,25 +2363,211 @@ function addMessageToScreen(
 }
 
 
-/* =====================================================
+
+/* =========================================================
+   FORMAT MESSAGE TIME
+========================================================= */
+
+function formatMessageTime(
+    value
+) {
+
+    if (!value) {
+        return "";
+    }
+
+
+    const date =
+        new Date(
+            value
+        );
+
+
+    if (
+        Number.isNaN(
+            date.getTime()
+        )
+    ) {
+
+        return String(
+            value
+        );
+
+    }
+
+
+    return date.toLocaleTimeString(
+        [],
+        {
+            hour: "2-digit",
+            minute: "2-digit"
+        }
+    );
+
+}
+
+
+
+/* =========================================================
+   MESSAGE STATUS HTML
+========================================================= */
+
+function getMessageStatusHTML(
+    status
+) {
+
+    if (status === "seen") {
+
+        return `
+            <span
+                class="seen-check"
+                title="Seen"
+            >
+                ✓✓
+            </span>
+        `;
+
+    }
+
+
+    if (
+        status === "delivered"
+    ) {
+
+        return `
+            <span
+                class="delivered-check"
+                title="Delivered"
+            >
+                ✓✓
+            </span>
+        `;
+
+    }
+
+
+    return `
+        <span
+            class="sent-check"
+            title="Sent"
+        >
+            ✓
+        </span>
+    `;
+
+}
+
+
+
+/* =========================================================
+   UPDATE MESSAGE STATUS
+========================================================= */
+
+function updateMessageStatus(
+    messageId,
+    status
+) {
+
+    const message =
+        document.querySelector(
+            '[data-message-id="' +
+            messageId +
+            '"]'
+        );
+
+
+    if (!message) {
+        return;
+    }
+
+
+    const statusElement =
+        message.querySelector(
+            ".message-status"
+        );
+
+
+    if (!statusElement) {
+        return;
+    }
+
+
+    statusElement.dataset.status =
+        status;
+
+
+    statusElement.innerHTML =
+        getMessageStatusHTML(
+            status
+        );
+
+}
+
+
+
+/* =========================================================
+   UPDATE EXISTING MESSAGE
+========================================================= */
+
+function updateExistingMessageStatus(
+    element,
+    message
+) {
+
+    if (
+        Number(
+            message.is_read
+        ) === 1
+    ) {
+
+        updateMessageStatus(
+            message.id,
+            "seen"
+        );
+
+    }
+
+}
+
+
+
+/* =========================================================
+   MARK VISIBLE MESSAGES AS SEEN
+========================================================= */
+
+function markVisibleMessagesAsSeen() {
+
+    document
+        .querySelectorAll(
+            ".message.sent .message-status"
+        )
+        .forEach(
+            function(status) {
+
+                status.dataset.status =
+                    "seen";
+
+
+                status.innerHTML =
+                    getMessageStatusHTML(
+                        "seen"
+                    );
+
+            }
+        );
+
+}
+
+
+
+/* =========================================================
    SEND MESSAGE
-===================================================== */
+========================================================= */
 
 function sendMessage() {
 
-    console.log(
-        "Send button clicked"
-    );
-
-
     if (!selectedContact) {
-
-        console.log(
-            "No contact selected"
-        );
-
         return;
-
     }
 
 
@@ -1629,29 +2592,34 @@ function sendMessage() {
         );
 
 
-    // =====================================================
-    // SOCKET NOT AVAILABLE
-    // =====================================================
+    /*
+     * Stop typing.
+     */
+
+    sendTypingStatus(
+        false
+    );
+
+
+    /*
+     * Socket unavailable.
+     */
 
     if (!socket) {
 
-        console.log(
-            "Socket does not exist."
-        );
-
-
-        /*
-         * Keep the message.
-         * It will be sent after Socket.IO connects.
-         */
-
         window.pendingMessage = {
-            receiver_id: receiverId,
-            message: message
+
+            receiver_id:
+                receiverId,
+
+            message:
+                message
+
         };
 
 
-        input.value = "";
+        input.value =
+            "";
 
 
         connectSocket();
@@ -1662,34 +2630,27 @@ function sendMessage() {
     }
 
 
-    // =====================================================
-    // SOCKET CONNECTING / DISCONNECTED
-    // =====================================================
+
+    /*
+     * Socket disconnected.
+     */
 
     if (!socket.connected) {
 
-        console.log(
-            "Socket is not connected."
-        );
-
-
-        /*
-         * Keep the message until connection
-         * is available.
-         */
-
         window.pendingMessage = {
-            receiver_id: receiverId,
-            message: message
+
+            receiver_id:
+                receiverId,
+
+            message:
+                message
+
         };
 
 
-        input.value = "";
+        input.value =
+            "";
 
-
-        /*
-         * Try to reconnect.
-         */
 
         try {
 
@@ -1698,7 +2659,6 @@ function sendMessage() {
         } catch (error) {
 
             console.error(
-                "Socket reconnect error:",
                 error
             );
 
@@ -1710,34 +2670,27 @@ function sendMessage() {
     }
 
 
-    // =====================================================
-    // SEND IMMEDIATELY
-    // =====================================================
 
-    console.log(
-        "Sending message:",
-        message
-    );
-
+    /*
+     * Send immediately.
+     */
 
     socket.emit(
         "send_message",
         {
+
             receiver_id:
                 receiverId,
 
             message:
                 message
+
         }
     );
 
 
-    /*
-     * Clear input only after successfully
-     * sending the event to Socket.IO.
-     */
-
-    input.value = "";
+    input.value =
+        "";
 
 
     input.focus();
@@ -1745,9 +2698,10 @@ function sendMessage() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    SEND BUTTON
-===================================================== */
+========================================================= */
 
 document.getElementById(
     "sendBtn"
@@ -1761,9 +2715,10 @@ document.getElementById(
 );
 
 
-/* =====================================================
+
+/* =========================================================
    ENTER TO SEND
-===================================================== */
+========================================================= */
 
 document.getElementById(
     "messageInput"
@@ -1772,7 +2727,8 @@ document.getElementById(
     function(event) {
 
         if (
-            event.key === "Enter"
+            event.key ===
+            "Enter"
         ) {
 
             event.preventDefault();
@@ -1785,9 +2741,190 @@ document.getElementById(
 );
 
 
-/* =====================================================
+
+/* =========================================================
+   TYPING DETECTION
+========================================================= */
+
+document.getElementById(
+    "messageInput"
+).addEventListener(
+    "input",
+    function() {
+
+        if (!selectedContact) {
+            return;
+        }
+
+
+        if (
+            this.value.length > 0
+        ) {
+
+            sendTypingStatus(
+                true
+            );
+
+
+            clearTimeout(
+                typingTimer
+            );
+
+
+            typingTimer =
+                setTimeout(
+                    function() {
+
+                        sendTypingStatus(
+                            false
+                        );
+
+                    },
+                    1200
+                );
+
+        } else {
+
+            sendTypingStatus(
+                false
+            );
+
+        }
+
+    }
+);
+
+
+
+/* =========================================================
+   TYPING STATUS
+========================================================= */
+
+function sendTypingStatus(
+    typing
+) {
+
+    if (!socket) {
+        return;
+    }
+
+
+    if (!socket.connected) {
+        return;
+    }
+
+
+    if (!selectedContact) {
+        return;
+    }
+
+
+    /*
+     * Avoid duplicate typing events.
+     */
+
+    if (
+        isTyping === typing
+    ) {
+
+        return;
+
+    }
+
+
+    isTyping =
+        typing;
+
+
+    socket.emit(
+        "typing",
+        {
+
+            receiver_id:
+                Number(
+                    selectedContact.id
+                ),
+
+            typing:
+                typing
+
+        }
+    );
+
+}
+
+
+
+/* =========================================================
+   SHOW TYPING
+========================================================= */
+
+function showTypingIndicator(
+    name
+) {
+
+    const indicator =
+        document.getElementById(
+            "typingIndicator"
+        );
+
+
+    const text =
+        document.getElementById(
+            "typingText"
+        );
+
+
+    if (!indicator) {
+        return;
+    }
+
+
+    if (text) {
+
+        text.textContent =
+            name +
+            " is typing";
+
+    }
+
+
+    indicator.style.display =
+        "flex";
+
+
+    scrollMessages();
+
+}
+
+
+
+/* =========================================================
+   HIDE TYPING
+========================================================= */
+
+function hideTypingIndicator() {
+
+    const indicator =
+        document.getElementById(
+            "typingIndicator"
+        );
+
+
+    if (indicator) {
+
+        indicator.style.display =
+            "none";
+
+    }
+
+}
+
+
+
+/* =========================================================
    FILE UPLOAD
-===================================================== */
+========================================================= */
 
 const fileBtn =
     document.getElementById(
@@ -1809,10 +2946,12 @@ fileBtn.addEventListener(
             return;
         }
 
+
         fileInput.click();
 
     }
 );
+
 
 
 fileInput.addEventListener(
@@ -1846,14 +2985,18 @@ fileInput.addEventListener(
 
 
         if (
-            file.size > maxSize
+            file.size >
+            maxSize
         ) {
 
             alert(
                 "File is too large. Maximum size is 100 MB."
             );
 
-            this.value = "";
+
+            this.value =
+                "";
+
 
             return;
 
@@ -1878,7 +3021,9 @@ fileInput.addEventListener(
 
         try {
 
-            fileBtn.disabled = true;
+            fileBtn.disabled =
+                true;
+
 
             fileBtn.textContent =
                 "⏳";
@@ -1889,7 +3034,9 @@ fileInput.addEventListener(
                     "/api/upload",
                     {
                         method: "POST",
-                        body: formData
+
+                        body:
+                            formData
                     }
                 );
 
@@ -1900,9 +3047,20 @@ fileInput.addEventListener(
 
             if (data.success) {
 
+                /*
+                 * Server also emits
+                 * message_sent.
+                 *
+                 * The duplicate check prevents
+                 * the same message appearing twice.
+                 */
+
                 addMessageToScreen(
                     data.message
                 );
+
+
+                loadContacts();
 
             } else {
 
@@ -1919,6 +3077,7 @@ fileInput.addEventListener(
                 error
             );
 
+
             alert(
                 "File upload failed."
             );
@@ -1926,22 +3085,29 @@ fileInput.addEventListener(
         }
 
 
-        fileBtn.disabled = false;
+        fileBtn.disabled =
+            false;
+
 
         fileBtn.textContent =
             "📎";
 
-        this.value = "";
+
+        this.value =
+            "";
 
     }
 );
 
 
-/* =====================================================
-   OPEN IMAGE
-===================================================== */
 
-function openImage(src) {
+/* =========================================================
+   OPEN IMAGE
+========================================================= */
+
+function openImage(
+    src
+) {
 
     window.open(
         src,
@@ -1951,9 +3117,10 @@ function openImage(src) {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    SCROLL
-===================================================== */
+========================================================= */
 
 function scrollMessages() {
 
@@ -1963,15 +3130,21 @@ function scrollMessages() {
         );
 
 
+    if (!container) {
+        return;
+    }
+
+
     container.scrollTop =
         container.scrollHeight;
 
 }
 
 
-/* =====================================================
-   ADD CONTACT
-===================================================== */
+
+/* =========================================================
+   ADD CONTACT MODAL
+========================================================= */
 
 const modal =
     document.getElementById(
@@ -1998,6 +3171,7 @@ document.getElementById(
 );
 
 
+
 document.getElementById(
     "closeModal"
 ).addEventListener(
@@ -2012,12 +3186,14 @@ document.getElementById(
 );
 
 
+
 document.getElementById(
     "confirmContact"
 ).addEventListener(
     "click",
     addContact
 );
+
 
 
 async function addContact() {
@@ -2035,6 +3211,7 @@ async function addContact() {
             "red"
         );
 
+
         return;
 
     }
@@ -2046,16 +3223,21 @@ async function addContact() {
             await fetch(
                 "/api/add-contact",
                 {
-                    method: "POST",
+
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
 
-                    body: JSON.stringify({
-                        email: email
-                    })
+                    body:
+                        JSON.stringify({
+                            email:
+                                email
+                        })
+
                 }
             );
 
@@ -2074,7 +3256,8 @@ async function addContact() {
 
             document.getElementById(
                 "emailInput"
-            ).value = "";
+            ).value =
+                "";
 
 
             await loadContacts();
@@ -2102,7 +3285,10 @@ async function addContact() {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
 
         showContactMessage(
             "Server connection error.",
@@ -2114,9 +3300,10 @@ async function addContact() {
 }
 
 
-/* =====================================================
+
+/* =========================================================
    CONTACT MESSAGE
-===================================================== */
+========================================================= */
 
 function showContactMessage(
     message,
@@ -2139,9 +3326,10 @@ function showContactMessage(
 }
 
 
-/* =====================================================
+
+/* =========================================================
    SEARCH
-===================================================== */
+========================================================= */
 
 document.getElementById(
     "searchInput"
@@ -2172,7 +3360,9 @@ document.getElementById(
 
                     if (
                         name &&
-                        name.includes(search)
+                        name.includes(
+                            search
+                        )
                     ) {
 
                         contact.style.display =
@@ -2192,19 +3382,201 @@ document.getElementById(
 );
 
 
-/* =====================================================
-   NOTIFICATION
-===================================================== */
+
+/* =========================================================
+   NOTIFICATIONS
+========================================================= */
 
 function showNotification(
     text
 ) {
 
-    console.log(
-        text
+    const notification =
+        document.getElementById(
+            "notification"
+        );
+
+
+    const notificationText =
+        document.getElementById(
+            "notificationText"
+        );
+
+
+    if (
+        !notification ||
+        !notificationText
+    ) {
+
+        return;
+
+    }
+
+
+    notificationText.textContent =
+        text;
+
+
+    notification.style.display =
+        "block";
+
+
+    /*
+     * Browser notification
+     */
+
+    if (
+        "Notification" in window &&
+        Notification.permission ===
+            "granted"
+    ) {
+
+        try {
+
+            new Notification(
+                "MyChat",
+                {
+                    body:
+                        text
+                }
+            );
+
+        } catch (e) {}
+
+    }
+
+
+    clearTimeout(
+        window.notificationTimer
     );
 
+
+    window.notificationTimer =
+        setTimeout(
+            function() {
+
+                notification.style.display =
+                    "none";
+
+            },
+            3000
+        );
+
 }
+
+
+
+/* =========================================================
+   NOTIFICATION PERMISSION
+========================================================= */
+
+function requestNotificationPermission() {
+
+    if (
+        notificationPermissionAsked
+    ) {
+
+        return;
+
+    }
+
+
+    notificationPermissionAsked =
+        true;
+
+
+    if (
+        "Notification" in window &&
+        Notification.permission ===
+            "default"
+    ) {
+
+        Notification.requestPermission()
+            .catch(
+                function() {}
+            );
+
+    }
+
+}
+
+
+
+/* =========================================================
+   SIMPLE NOTIFICATION SOUND
+========================================================= */
+
+function playNotificationSound() {
+
+    try {
+
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+
+        if (!AudioContext) {
+            return;
+        }
+
+
+        const context =
+            new AudioContext();
+
+
+        const oscillator =
+            context.createOscillator();
+
+
+        const gain =
+            context.createGain();
+
+
+        oscillator.frequency.value =
+            700;
+
+
+        oscillator.type =
+            "sine";
+
+
+        gain.gain.value =
+            0.04;
+
+
+        oscillator.connect(
+            gain
+        );
+
+
+        gain.connect(
+            context.destination
+        );
+
+
+        oscillator.start();
+
+
+        setTimeout(
+            function() {
+
+                oscillator.stop();
+
+                context.close();
+
+            },
+            120
+        );
+
+    } catch (e) {}
+
+}
+
+
+
+/* =========================================================
+   TEMPORARY CONTACT
+========================================================= */
 
 function createTemporaryContact(
     user,
@@ -2216,18 +3588,19 @@ function createTemporaryContact(
             "contacts"
         );
 
+
     if (!container) {
         return;
     }
 
 
-    // Already exists?
     const existing =
         document.querySelector(
             '.contact[data-id="' +
             user.id +
             '"]'
         );
+
 
     if (existing) {
         return;
@@ -2239,8 +3612,10 @@ function createTemporaryContact(
             "div"
         );
 
+
     div.className =
         "contact temporary-contact";
+
 
     div.dataset.id =
         user.id;
@@ -2254,21 +3629,46 @@ function createTemporaryContact(
 
     div.innerHTML = `
 
-        <div class="avatar">
-            ${escapeHtml(firstLetter)}
+        <div class="avatar contact-avatar">
+
+            ${escapeHtml(
+                firstLetter
+            )}
+
+            <span
+                class="online-dot"
+                title="Online"
+            ></span>
+
         </div>
+
 
         <div class="contact-info">
 
             <div class="contact-name">
-                ${escapeHtml(user.name)}
+                ${escapeHtml(
+                    user.name
+                )}
             </div>
 
+
             <div class="last-message">
-                ${escapeHtml(user.email)}
+
+                ${
+                    firstMessage &&
+                    firstMessage.message
+                    ? escapeHtml(
+                        firstMessage.message
+                    )
+                    : escapeHtml(
+                        user.email
+                    )
+                }
+
             </div>
 
         </div>
+
 
         <div class="contact-right">
 
@@ -2285,15 +3685,20 @@ function createTemporaryContact(
         "click",
         async function() {
 
-            /*
-             * Create a contact object with the
-             * same structure used by normal contacts.
-             */
-
             const contact = {
-                id: user.id,
-                name: user.name,
-                email: user.email
+
+                id:
+                    user.id,
+
+                name:
+                    user.name,
+
+                email:
+                    user.email,
+
+                online:
+                    true
+
             };
 
 
@@ -2302,20 +3707,11 @@ function createTemporaryContact(
             );
 
 
-            /*
-             * Remove temporary contact after
-             * opening the conversation.
-             */
-
             div.remove();
 
         }
     );
 
-
-    /*
-     * Put the new person at the top.
-     */
 
     container.prepend(
         div
@@ -2323,9 +3719,11 @@ function createTemporaryContact(
 
 }
 
-/* =====================================================
+
+
+/* =========================================================
    SECURITY
-===================================================== */
+========================================================= */
 
 function escapeHtml(
     text
@@ -2356,9 +3754,10 @@ function escapeHtml(
 }
 
 
-/* =====================================================
+
+/* =========================================================
    START
-===================================================== */
+========================================================= */
 
 checkLogin();
 
