@@ -768,6 +768,19 @@ function connectSocket() {
             }
 
 
+            // Confirm delivery only after this client has actually received
+            // the message. The server then sends ✓✓ to the sender.
+            if (socket && message.id && message.sender_id) {
+                socket.emit(
+                    "message_delivered_ack",
+                    {
+                        message_id: Number(message.id),
+                        sender_id: Number(message.sender_id)
+                    }
+                );
+            }
+
+
             const senderId =
                 Number(
                     message.sender_id
@@ -2037,9 +2050,6 @@ async function loadMessages(
 
         scrollMessages();
 
-
-        markVisibleMessagesAsSeen();
-
     } catch (error) {
 
         console.error(
@@ -2159,13 +2169,9 @@ function addMessageToScreen(
 
     if (message.message) {
 
-        content += `
-            <div class="bubble">
-                ${escapeHtml(
-                    message.message
-                )}
-            </div>
-        `;
+        content += `<div class="bubble">${escapeHtml(
+            String(message.message || "").trim()
+        )}</div>`;
 
     }
 
