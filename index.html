@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="/style.css">
 
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<style>
+.list-title{padding:8px 14px;font-size:11px;font-weight:700;opacity:.6;letter-spacing:.08em}.group-sender{font-size:11px;font-weight:700;margin:0 0 3px 3px}.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}.modal.show{display:flex!important}.contact{cursor:pointer}.unread-badge{margin-left:auto}.bubble{white-space:pre-wrap;line-height:1.35}
+</style>
 </head>
 
 <body>
@@ -3743,37 +3746,197 @@ checkLogin();
 
 
 <script>
-/* ===== GROUP / PROFILE / CUSTOM CONTACT UPGRADE ===== */
+/* ===== FINAL GROUP / PROFILE / CONTACT UPGRADE ===== */
 let selectedGroup = null;
 let loadedContacts = [];
-const esc = v => String(v ?? '').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function avatarHTML(item){ return item.profile_photo || item.photo ? `<img src="${esc(item.profile_photo||item.photo)}" alt="">` : esc((item.name||'?').charAt(0).toUpperCase()); }
+
+function upgradeEsc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function upgradeAvatar(item){
+  const src = item?.profile_photo || item?.photo || '';
+  if(src) return `<img src="${upgradeEsc(src)}" alt="">`;
+  return upgradeEsc((item?.name || '?').trim().charAt(0).toUpperCase());
+}
 
 async function loadContactsUpgrade(){
-  try{ const [cr,gr]=await Promise.all([fetch('/api/contacts'),fetch('/api/groups')]); const cd=await cr.json(), gd=await gr.json();
-    if(cd.success) loadedContacts=cd.contacts||[];
-    const box=document.getElementById('contacts'); if(!box)return; box.innerHTML='';
-    if(gd.success && gd.groups?.length){ box.insertAdjacentHTML('beforeend','<div class="list-title">GROUPS</div>'); gd.groups.forEach(g=>{const d=document.createElement('div');d.className='contact group-contact';d.dataset.groupId=g.id;d.innerHTML=`<div class="avatar">${avatarHTML(g)}</div><div class="contact-info"><b>${esc(g.name)}</b><span>${g.member_count} members</span></div>`;d.onclick=()=>selectGroup(g);box.appendChild(d)}); }
+  try{
+    const [cr, gr] = await Promise.all([fetch('/api/contacts'), fetch('/api/groups')]);
+    const cd = await cr.json();
+    const gd = await gr.json();
+    loadedContacts = cd.success ? (cd.contacts || []) : [];
+    const box = document.getElementById('contacts');
+    if(!box) return;
+    box.innerHTML='';
+    if(gd.success && (gd.groups||[]).length){
+      box.insertAdjacentHTML('beforeend','<div class="list-title">GROUPS</div>');
+      gd.groups.forEach(g=>{
+        const d=document.createElement('div');
+        d.className='contact group-contact'; d.dataset.groupId=g.id;
+        d.innerHTML=`<div class="avatar">${upgradeAvatar(g)}</div><div class="contact-info"><b>${upgradeEsc(g.name)}</b><span>${Number(g.member_count||0)} members</span></div>`;
+        d.onclick=()=>selectGroupUpgrade(g); box.appendChild(d);
+      });
+    }
     box.insertAdjacentHTML('beforeend','<div class="list-title">CONTACTS</div>');
-    if(cd.success) cd.contacts.forEach(c=>{const d=document.createElement('div');d.className='contact';d.dataset.id=c.id;d.innerHTML=`<div class="avatar">${avatarHTML(c)}</div><div class="contact-info"><b>${esc(c.name)}</b><span>${esc(c.last_message||c.email||'')}</span></div>${Number(c.unread_count||0)?`<span class="unread-badge">${c.unread_count}</span>`:''}`;d.onclick=()=>{selectedGroup=null; selectedContact=c; selectContact(c)};box.appendChild(d)});
-  }catch(e){console.error(e)}
+    if(loadedContacts.length){
+      loadedContacts.forEach(c=>{
+        const d=document.createElement('div'); d.className='contact'; d.dataset.id=c.id;
+        d.innerHTML=`<div class="avatar">${upgradeAvatar(c)}</div><div class="contact-info"><b>${upgradeEsc(c.name)}</b><span>${upgradeEsc(c.last_message || c.email || '')}</span></div>${Number(c.unread_count||0)?`<span class="unread-badge">${c.unread_count}</span>`:''}`;
+        d.onclick=()=>{selectedGroup=null; selectedContact=c; if(typeof selectContact==='function') selectContact(c);};
+        box.appendChild(d);
+      });
+    } else {
+      box.insertAdjacentHTML('beforeend','<div class="no-contacts">No contacts yet.</div>');
+    }
+  }catch(e){ console.error('CONTACT LIST ERROR',e); }
 }
-async function selectGroup(g){selectedGroup=g;selectedContact=null;document.querySelectorAll('.contact').forEach(x=>x.classList.remove('active'));document.querySelector(`[data-group-id="${g.id}"]`)?.classList.add('active');document.getElementById('chatName').textContent=g.name;document.getElementById('chatStatus').textContent=`${g.member_count||''} members`;const av=document.getElementById('chatAvatar');av.innerHTML=avatarHTML(g);document.getElementById('messageInput').disabled=false;document.getElementById('sendBtn').disabled=false;document.getElementById('fileBtn').disabled=true;const r=await fetch('/api/groups/'+g.id+'/messages');const d=await r.json();const box=document.getElementById('messages');box.innerHTML='';(d.messages||[]).forEach(addGroupMessage);scrollMessages();}
-function addGroupMessage(m){if(!selectedGroup||Number(m.group_id)!==Number(selectedGroup.id))return; if(document.querySelector(`.message[data-group-message-id="${m.id}"]`))return;const own=currentUser&&Number(m.sender_id)===Number(currentUser.id);const d=document.createElement('div');d.className='message '+(own?'sent':'received');d.dataset.groupMessageId=m.id;d.innerHTML=`${own?'':`<div class="group-sender">${esc(m.sender_name)}</div>`}<div class="bubble">${esc(m.message)}</div><div class="message-time">${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;document.getElementById('messages').appendChild(d);scrollMessages();}
-const oldSendMessage=window.sendMessage;
-window.sendMessage=function(){if(!selectedGroup)return oldSendMessage();const input=document.getElementById('messageInput'),text=input.value.trim();if(!text)return;if(!socket||!socket.connected){showNotification?.('Connecting...');return}socket.emit('send_group_message',{group_id:Number(selectedGroup.id),message:text});input.value=''};
-function openProfileModal(){document.getElementById('profileModal').classList.add('show');fetch('/api/profile').then(r=>r.json()).then(d=>{if(d.user){document.getElementById('profilePreview').innerHTML=avatarHTML(d.user)}})}
-function closeUpgradeModal(id){document.getElementById(id).classList.remove('show')}
-async function uploadProfilePhoto(){const f=document.getElementById('profilePhotoInput').files[0];if(!f)return;const fd=new FormData();fd.append('photo',f);const d=await (await fetch('/api/profile',{method:'POST',body:fd})).json();if(d.success){document.getElementById('profilePreview').innerHTML=`<img src="${d.profile_photo}">`;loadContactsUpgrade();closeUpgradeModal('profileModal')}}
-function openGroupModal(){const box=document.getElementById('groupMemberList');box.innerHTML=loadedContacts.map(c=>`<label><input type="checkbox" value="${c.id}"> ${esc(c.name)}</label>`).join('')||'No contacts yet';document.getElementById('groupModal').classList.add('show')}
-async function createGroup(){const name=document.getElementById('groupNameInput').value.trim();const members=[...document.querySelectorAll('#groupMemberList input:checked')].map(x=>x.value);if(!name){document.getElementById('groupMessage').textContent='Enter a group name';return}const fd=new FormData();fd.append('name',name);fd.append('member_ids',members.join(','));const f=document.getElementById('groupPhotoInput').files[0];if(f)fd.append('photo',f);const d=await (await fetch('/api/groups',{method:'POST',body:fd})).json();if(d.success){closeUpgradeModal('groupModal');await loadContactsUpgrade();selectGroup(d.group)}else document.getElementById('groupMessage').textContent=d.message||'Could not create group'}
-const oldAddContact=window.addContact;
-window.addContact=async function(){const email=document.getElementById('emailInput').value.trim(), custom=document.getElementById('contactNameInput').value.trim();if(!email)return showContactMessage('Enter an email address.','red');const r=await fetch('/api/add-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,custom_name:custom})});const d=await r.json();if(d.success){showContactMessage('Contact saved successfully!','green');document.getElementById('emailInput').value='';document.getElementById('contactNameInput').value='';await loadContactsUpgrade();setTimeout(()=>modal.classList.remove('show'),500)}else showContactMessage(d.message||'Could not add contact.','red')}
-function setupUpgradeSocket(){if(!socket)return;socket.on('new_group_message',m=>{if(selectedGroup&&Number(selectedGroup.id)===Number(m.group_id))addGroupMessage(m);loadContactsUpgrade()});socket.on('group_created',()=>loadContactsUpgrade())}
-const oldConnectSocket=window.connectSocket;
-window.connectSocket=function(){oldConnectSocket();setTimeout(setupUpgradeSocket,300)};
+
+async function selectGroupUpgrade(g){
+  selectedGroup=g; selectedContact=null;
+  document.querySelectorAll('.contact').forEach(x=>x.classList.remove('active'));
+  document.querySelector(`[data-group-id="${g.id}"]`)?.classList.add('active');
+  const name=document.getElementById('chatName'); if(name) name.textContent=g.name;
+  const status=document.getElementById('chatStatus'); if(status) status.textContent=`${Number(g.member_count||0)} members`;
+  const av=document.getElementById('chatAvatar'); if(av) av.innerHTML=upgradeAvatar(g);
+  const input=document.getElementById('messageInput'); if(input) input.disabled=false;
+  const send=document.getElementById('sendBtn'); if(send) send.disabled=false;
+  const box=document.getElementById('messages'); if(!box) return;
+  box.innerHTML='';
+  const r=await fetch('/api/groups/'+encodeURIComponent(g.id)+'/messages'); const d=await r.json();
+  (d.messages||[]).forEach(addGroupMessageUpgrade); scrollMessages();
+}
+function addGroupMessageUpgrade(m){
+  if(!selectedGroup || Number(m.group_id)!==Number(selectedGroup.id)) return;
+  const box=document.getElementById('messages'); if(!box) return;
+  if(box.querySelector(`[data-group-message-id="${m.id}"]`)) return;
+  const own=currentUser && Number(m.sender_id)===Number(currentUser.id);
+  const d=document.createElement('div'); d.className='message '+(own?'sent':'received'); d.dataset.groupMessageId=m.id;
+  d.innerHTML=`${own?'':`<div class="group-sender">${upgradeEsc(m.sender_name||'')}</div>`}<div class="bubble">${upgradeEsc(String(m.message||'').trim())}</div><div class="message-time">${m.created_at?new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</div>`;
+  box.appendChild(d); scrollMessages();
+}
+
+const originalSendMessage = window.sendMessage;
+window.sendMessage = function(){
+  if(!selectedGroup) return originalSendMessage?.();
+  const input=document.getElementById('messageInput'); const text=(input?.value||'').trim();
+  if(!text) return;
+  if(!socket || !socket.connected){ if(typeof showNotification==='function') showNotification('Connecting...'); return; }
+  socket.emit('send_group_message',{group_id:Number(selectedGroup.id),message:text}); input.value='';
+};
+
+function openProfileModalUpgrade(){
+  const m=document.getElementById('profileModal'); if(!m){alert('Profile window is not available in this version.');return;}
+  m.classList.add('show');
+  fetch('/api/profile').then(r=>r.json()).then(d=>{
+    const u=d.user||d.profile||d;
+    const p=document.getElementById('profilePreview'); if(p) p.innerHTML=upgradeAvatar(u);
+  }).catch(console.error);
+}
+function openGroupModalUpgrade(){
+  const m=document.getElementById('groupModal'); if(!m){alert('New Group window is not available in this version.');return;}
+  const box=document.getElementById('groupMemberList');
+  if(box) box.innerHTML=loadedContacts.map(c=>`<label><input type="checkbox" value="${c.id}"> ${upgradeEsc(c.name)}</label>`).join('') || 'No contacts yet';
+  m.classList.add('show');
+}
+function closeUpgradeModal(id){ document.getElementById(id)?.classList.remove('show'); }
+async function uploadProfilePhotoUpgrade(){
+  const f=document.getElementById('profilePhotoInput')?.files?.[0]; if(!f)return;
+  const fd=new FormData(); fd.append('photo',f);
+  const d=await (await fetch('/api/profile',{method:'POST',body:fd})).json();
+  if(d.success){ const p=document.getElementById('profilePreview'); if(p)p.innerHTML=`<img src="${upgradeEsc(d.profile_photo)}" alt="">`; await loadContactsUpgrade(); closeUpgradeModal('profileModal'); }
+  else alert(d.message||'Could not upload profile photo.');
+}
+async function createGroupUpgrade(){
+  const name=(document.getElementById('groupNameInput')?.value||'').trim();
+  const members=[...document.querySelectorAll('#groupMemberList input:checked')].map(x=>x.value);
+  const msg=document.getElementById('groupMessage');
+  if(!name){if(msg)msg.textContent='Enter a group name.';return;}
+  const fd=new FormData(); fd.append('name',name); fd.append('member_ids',members.join(','));
+  const f=document.getElementById('groupPhotoInput')?.files?.[0]; if(f)fd.append('photo',f);
+  const d=await (await fetch('/api/groups',{method:'POST',body:fd})).json();
+  if(d.success){closeUpgradeModal('groupModal');await loadContactsUpgrade();if(d.group)selectGroupUpgrade(d.group);}
+  else if(msg)msg.textContent=d.message||'Could not create group.';
+}
+
+function wireUpgradeButtons(){
+  const profileBtn=[...document.querySelectorAll('button,a')].find(x=>/profile/i.test(x.textContent||'') && !x.dataset.upgradeWired);
+  if(profileBtn){profileBtn.dataset.upgradeWired='1';profileBtn.onclick=e=>{e.preventDefault();openProfileModalUpgrade();};}
+  const groupBtn=[...document.querySelectorAll('button,a')].find(x=>/new\s*group/i.test(x.textContent||'') && !x.dataset.upgradeWired);
+  if(groupBtn){groupBtn.dataset.upgradeWired='1';groupBtn.onclick=e=>{e.preventDefault();openGroupModalUpgrade();};}
+}
+
+function setupUpgradeSocket(){
+  if(!socket || socket.__upgradeReady) return;
+  socket.__upgradeReady=true;
+  socket.on('new_group_message',m=>{ if(selectedGroup && Number(selectedGroup.id)===Number(m.group_id)) addGroupMessageUpgrade(m); loadContactsUpgrade(); });
+  socket.on('group_created',()=>loadContactsUpgrade());
+}
+const originalConnectSocket=window.connectSocket;
+window.connectSocket=function(){ originalConnectSocket?.(); setTimeout(setupUpgradeSocket,500); };
+window.addEventListener('load',()=>{ setTimeout(()=>{loadContactsUpgrade();wireUpgradeButtons();setupUpgradeSocket();},700); });
+window.openProfileModal=openProfileModalUpgrade;
+window.openGroupModal=openGroupModalUpgrade;
+window.createGroup=createGroupUpgrade;
+window.uploadProfilePhoto=uploadProfilePhotoUpgrade;
 window.loadContacts=loadContactsUpgrade;
-window.addEventListener('load',()=>setTimeout(loadContactsUpgrade,800));
 </script>
+
+<script>
+// ===== FINAL UI FIXES =====
+(function(){
+  function byId(id){return document.getElementById(id)}
+  function showModal(id){const el=byId(id); if(el){el.classList.add('show');el.style.display='flex';}}
+  function hideModal(id){const el=byId(id); if(el){el.classList.remove('show');el.style.display='none';}}
+  window.closeUpgradeModal=hideModal;
+
+  // Make Profile/New Group controls work even if inline handlers are missing.
+  document.addEventListener('click', function(e){
+    const t=e.target.closest('#profileBtn,[data-action="profile"],.profile-btn,#newGroupBtn,[data-action="new-group"],.new-group-btn');
+    if(!t) return;
+    e.preventDefault();
+    if(t.id==='profileBtn'||t.dataset.action==='profile'||t.classList.contains('profile-btn')) {
+      if(typeof window.openProfileModal==='function') window.openProfileModal();
+      else showModal('profileModal');
+    } else {
+      if(typeof window.openGroupModal==='function') window.openGroupModal();
+      else showModal('groupModal');
+    }
+  });
+
+  // Prevent contacts from disappearing after selecting an incoming chat.
+  const originalSelect = window.selectContact;
+  window.selectContact = async function(contact){
+    window.selectedContact = contact;
+    window.selectedGroup = null;
+    if(typeof originalSelect==='function') return originalSelect.apply(this, arguments);
+    const name=contact.custom_name||contact.name||contact.email||'Chat';
+    const n=byId('chatName'), s=byId('chatStatus');
+    if(n)n.textContent=name; if(s)s.textContent=contact.email||'';
+    try { await window.loadMessages(contact.id); } catch(e){ console.error(e); }
+  };
+
+  // Always reload the real server-side contact/chat list after an incoming message.
+  if(window.socket){
+    window.socket.on('new_message', function(){
+      if(typeof window.loadContacts==='function') setTimeout(window.loadContacts,80);
+    });
+  }
+
+  // Fix custom contact display name whenever the API provides one.
+  const oldLoad = window.loadContacts;
+  if(typeof oldLoad==='function'){
+    window.loadContacts = async function(){
+      const result=await oldLoad.apply(this,arguments);
+      document.querySelectorAll('.contact[data-id]').forEach(el=>{
+        const id=Number(el.dataset.id);
+        const c=(window.loadedContacts||[]).find(x=>Number(x.id)===id);
+        if(c){const name=el.querySelector('.contact-name,.contact-info b'); if(name) name.textContent=c.custom_name||c.name||c.email;}
+      });
+      return result;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
