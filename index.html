@@ -9,9 +9,6 @@
     <link rel="stylesheet" href="/style.css">
 
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-<style>
-.list-title{padding:8px 14px;font-size:11px;font-weight:700;opacity:.6;letter-spacing:.08em}.group-sender{font-size:11px;font-weight:700;margin:0 0 3px 3px}.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}.modal.show{display:flex!important}.contact{cursor:pointer}.unread-badge{margin-left:auto}.bubble{white-space:pre-wrap;line-height:1.35}
-</style>
 </head>
 
 <body>
@@ -138,13 +135,22 @@
 
             <h1>MyChat</h1>
 
-            <button
-                class="profile-btn"
-                onclick="logout()"
-                title="Logout"
-            >
-                🚪 Logout
-            </button>
+            <div class="header-actions">
+                <button
+                    class="profile-btn"
+                    id="profileBtn"
+                    title="Profile"
+                >
+                    👤
+                </button>
+                <button
+                    class="logout-btn"
+                    onclick="logout()"
+                    title="Logout"
+                >
+                    🚪
+                </button>
+            </div>
 
         </div>
 
@@ -169,16 +175,13 @@
 
 
         <div class="sidebar-actions">
-        <button class="add-contact-btn" onclick="openProfileModal()">👤 Profile</button>
-        <button class="add-contact-btn" onclick="openGroupModal()">👥 New Group</button>
+            <button class="add-contact-btn" id="addContactBtn" title="Add Contact">➕ Add Contact</button>
+            <button class="new-group-btn" id="newGroupBtn" title="New Group">👥 New Group</button>
         </div>
-        <button
-            class="add-contact-btn"
-            id="addContactBtn"
-            title="Add Contact"
-        >
-            ➕ Add Contact
-        </button>
+
+        <div class="section-title">Groups</div>
+        <div class="groups" id="groups"></div>
+        <div class="section-title">Contacts</div>
 
 
         <div
@@ -341,8 +344,11 @@
             Enter your friend's email address
         </p>
 
-        <input type="email" id="emailInput" placeholder="friend@example.com">
-        <input type="text" id="contactNameInput" placeholder="Save as name (optional)">
+        <input
+            type="email"
+            id="emailInput"
+            placeholder="friend@example.com"
+        >
 
         <button
             class="confirm-btn"
@@ -362,6 +368,36 @@
 </div>
 
 
+
+<!-- =========================================================
+     PROFILE MODAL
+========================================================= -->
+<div class="modal" id="profileModal">
+    <div class="modal-box profile-modal-box">
+        <button class="close-btn" id="closeProfileModal">✖</button>
+        <h2>My Profile</h2>
+        <div class="profile-large-avatar" id="profileAvatar">?</div>
+        <input type="text" id="profileNameInput" placeholder="Your name">
+        <input type="email" id="profileEmailInput" placeholder="Email" disabled>
+        <button class="confirm-btn wide-btn" id="saveProfileBtn">Save Profile</button>
+        <p id="profileMessage" class="modal-message"></p>
+    </div>
+</div>
+
+<!-- =========================================================
+     NEW GROUP MODAL
+========================================================= -->
+<div class="modal" id="groupModal">
+    <div class="modal-box">
+        <button class="close-btn" id="closeGroupModal">✖</button>
+        <h2>New Group</h2>
+        <p>Create a group and add contacts by email.</p>
+        <input type="text" id="groupNameInput" placeholder="Group name">
+        <textarea id="groupMembersInput" placeholder="Member emails, separated by commas"></textarea>
+        <button class="confirm-btn wide-btn" id="createGroupBtn">Create Group</button>
+        <p id="groupMessage" class="modal-message"></p>
+    </div>
+</div>
 
 <!-- =========================================================
      NOTIFICATION
@@ -386,6 +422,7 @@
 let currentUser = null;
 
 let selectedContact = null;
+let selectedGroup = null;
 
 let socket = null;
 
@@ -683,6 +720,7 @@ function connectSocket() {
 
 
             loadContacts();
+            loadGroups();
 
         }
     );
@@ -730,40 +768,24 @@ function connectSocket() {
                 return;
             }
 
-            console.log(
-                "MESSAGES READ:",
-                data
-            );
 
-            // Update only the exact messages that the other user read.
-            // This makes the blue ✓✓ change immediately without waiting
-            // for a reload or relying on the currently selected chat.
-            const messageIds =
-                Array.isArray(data.message_ids)
-                    ? data.message_ids
-                    : [];
+            const contactId =
+                Number(
+                    data.contact_id
+                );
 
-            messageIds.forEach(
-                function(messageId) {
-                    updateMessageStatus(
-                        Number(messageId),
-                        "seen"
-                    );
-                }
-            );
 
-            // Backwards compatibility with older server payloads.
-            if (messageIds.length === 0) {
-                const contactId =
-                    Number(data.contact_id);
+            if (
+                selectedContact &&
+                Number(
+                    selectedContact.id
+                ) === contactId
+            ) {
 
-                if (
-                    selectedContact &&
-                    Number(selectedContact.id) === contactId
-                ) {
-                    markVisibleMessagesAsSeen();
-                }
+                markVisibleMessagesAsSeen();
+
             }
+
         }
     );
 
@@ -824,23 +846,45 @@ function connectSocket() {
 
 
                 /*
-                 * The message is visible in the currently open chat,
-                 * so acknowledge it as read immediately over Socket.IO.
-                 * The server persists is_read=1 and broadcasts the exact
-                 * message IDs back to the sender in real time.
+                 * Mark as read immediately.
                  */
-                if (socket) {
-                    socket.emit(
-                        "mark_read",
+
+                try {
+
+                    await fetch(
+                        "/api/messages/" +
+                        senderId +
+                        "/read",
                         {
-                            contact_id:
-                                senderId
+                            method: "POST"
                         }
                     );
+
+
+                    if (socket) {
+
+                        socket.emit(
+                            "mark_read",
+                            {
+                                contact_id:
+                                    senderId
+                            }
+                        );
+
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        "Read status error:",
+                        error
+                    );
+
                 }
 
 
                 loadContacts();
+            loadGroups();
 
 
                 return;
@@ -1447,6 +1491,7 @@ async function logout() {
     currentUser = null;
 
     selectedContact = null;
+    selectedGroup = null;
 
 
     document.getElementById(
@@ -1928,23 +1973,47 @@ async function selectContact(
     hideTypingIndicator();
 
 
-    // Load the conversation first, then tell the server that the
-    // receiver is actually looking at this chat. The server will
-    // broadcast the exact read message IDs back to the sender.
-    await loadMessages(
-        contact.id
-    );
+    /*
+     * Mark messages read.
+     */
+
+    try {
+
+        await fetch(
+            "/api/messages/" +
+            contact.id +
+            "/read",
+            {
+                method: "POST"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Read error:",
+            error
+        );
+
+    }
 
 
     if (socket) {
+
         socket.emit(
             "mark_read",
             {
                 contact_id:
-                    Number(contact.id)
+                    contact.id
             }
         );
+
     }
+
+
+    await loadMessages(
+        contact.id
+    );
 
 
     loadContacts();
@@ -2547,6 +2616,11 @@ function markVisibleMessagesAsSeen() {
 
 function sendMessage() {
 
+    if (selectedGroup) {
+        sendGroupMessage();
+        return;
+    }
+
     if (!selectedContact) {
         return;
     }
@@ -2679,6 +2753,15 @@ function sendMessage() {
 }
 
 
+
+
+async function sendGroupMessage() {
+    if (!selectedGroup || !socket || !socket.connected) return;
+    const input = document.getElementById("messageInput");
+    const message = input.value.trim(); if (!message) return;
+    socket.emit("send_group_message", {group_id:Number(selectedGroup.id), message});
+    input.value = ""; input.focus();
+}
 
 /* =========================================================
    SEND BUTTON
@@ -3736,206 +3819,137 @@ function escapeHtml(
 
 
 
+
+/* =========================================================
+   PROFILE
+========================================================= */
+function openProfileModal() {
+    if (!currentUser) return;
+    document.getElementById("profileNameInput").value = currentUser.name || "";
+    document.getElementById("profileEmailInput").value = currentUser.email || "";
+    document.getElementById("profileAvatar").textContent = (currentUser.name || "?").charAt(0).toUpperCase();
+    document.getElementById("profileMessage").textContent = "";
+    document.getElementById("profileModal").classList.add("show");
+}
+
+async function saveProfile() {
+    const name = document.getElementById("profileNameInput").value.trim();
+    if (!name) return showProfileMessage("Name is required.", "red");
+    try {
+        const r = await fetch("/api/profile", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+        const data = await r.json();
+        if (!data.success) return showProfileMessage(data.message || "Could not update profile.", "red");
+        currentUser = data.user;
+        document.getElementById("currentUserName").textContent = currentUser.name;
+        document.getElementById("profileAvatar").textContent = currentUser.name.charAt(0).toUpperCase();
+        showProfileMessage("Profile updated.", "green");
+    } catch(e) { showProfileMessage("Server connection error.", "red"); }
+}
+function showProfileMessage(message, color) {
+    const el = document.getElementById("profileMessage"); el.textContent = message; el.style.color = color;
+}
+
+/* =========================================================
+   GROUPS
+========================================================= */
+async function loadGroups() {
+    const container = document.getElementById("groups");
+    if (!container) return;
+    try {
+        const r = await fetch("/api/groups");
+        const data = await r.json();
+        container.innerHTML = "";
+        if (!data.success || !data.groups || !data.groups.length) {
+            container.innerHTML = '<div class="no-groups">No groups yet.</div>';
+            return;
+        }
+        data.groups.forEach(group => createGroupElement(group, container));
+    } catch(e) {
+        console.error("Could not load groups:", e);
+        container.innerHTML = '<div class="no-groups">Could not load groups.</div>';
+    }
+}
+function createGroupElement(group, container) {
+    const div = document.createElement("div");
+    div.className = "contact group-item";
+    div.dataset.id = group.id;
+    div.innerHTML = `<div class="avatar group-avatar">👥</div><div class="contact-info"><div class="contact-name">${escapeHtml(group.name)}</div><div class="last-message">${escapeHtml(group.last_message || (group.member_count + " members"))}</div></div>`;
+    div.addEventListener("click", () => selectGroup(group));
+    container.appendChild(div);
+}
+async function selectGroup(group) {
+    selectedGroup = group;
+    selectedContact = null;
+    document.querySelectorAll(".contact").forEach(el => el.classList.remove("active"));
+    const el = document.querySelector('.group-item[data-id="' + group.id + '"]'); if (el) el.classList.add("active");
+    document.getElementById("chatName").textContent = group.name;
+    document.getElementById("chatAvatar").textContent = "👥";
+    document.getElementById("chatStatus").textContent = (group.member_count || 0) + " members";
+    document.getElementById("messageInput").disabled = false;
+    document.getElementById("sendBtn").disabled = false;
+    document.getElementById("fileBtn").disabled = true;
+    hideTypingIndicator();
+    await loadGroupMessages(group.id);
+    document.getElementById("messageInput").focus();
+}
+async function loadGroupMessages(groupId) {
+    try {
+        const r = await fetch("/api/groups/" + groupId + "/messages");
+        const data = await r.json();
+        const box = document.getElementById("messages"); box.innerHTML = "";
+        if (!data.success || !data.messages.length) { box.innerHTML = '<div class="empty-chat">No messages yet</div>'; return; }
+        data.messages.forEach(m => addGroupMessageToScreen(m)); scrollMessages();
+    } catch(e) { console.error(e); }
+}
+function addGroupMessageToScreen(m) {
+    const box = document.getElementById("messages");
+    const sent = Number(m.sender_id) === Number(currentUser.id);
+    const div = document.createElement("div"); div.className = "message " + (sent ? "sent" : "received");
+    div.dataset.messageId = m.id;
+    div.innerHTML = `<div class="group-sender">${escapeHtml(m.sender_name || "Member")}</div><div class="bubble">${escapeHtml(m.message || "")}</div><div class="message-footer"><span class="time">${formatMessageTime(m.created_at)}</span></div>`;
+    box.appendChild(div);
+}
+async function createGroup() {
+    const name = document.getElementById("groupNameInput").value.trim();
+    const raw = document.getElementById("groupMembersInput").value.trim();
+    if (!name) return showGroupMessage("Enter a group name.", "red");
+    const emails = raw.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+    try {
+        const r = await fetch("/api/groups", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name, emails})});
+        const data = await r.json();
+        if (!data.success) return showGroupMessage(data.message || "Could not create group.", "red");
+        showGroupMessage("Group created.", "green");
+        document.getElementById("groupNameInput").value = ""; document.getElementById("groupMembersInput").value = "";
+        await loadGroups();
+        setTimeout(() => document.getElementById("groupModal").classList.remove("show"), 700);
+    } catch(e) { showGroupMessage("Server connection error.", "red"); }
+}
+function showGroupMessage(message, color) { const el=document.getElementById("groupMessage"); el.textContent=message; el.style.color=color; }
+function formatMessageTime(value) { if (!value) return ""; try { return new Date(value).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}); } catch(e) { return ""; } }
+
+/* GROUP SOCKET EVENTS */
+function setupGroupSocketEvents() {
+    if (!socket) return;
+    socket.on("group_message", function(message) {
+        if (!message || !selectedGroup || Number(message.group_id) !== Number(selectedGroup.id)) return;
+        addGroupMessageToScreen(message); scrollMessages(); loadGroups();
+    });
+}
+
+
+document.getElementById("profileBtn").addEventListener("click", openProfileModal);
+document.getElementById("closeProfileModal").addEventListener("click", () => document.getElementById("profileModal").classList.remove("show"));
+document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
+document.getElementById("newGroupBtn").addEventListener("click", () => { document.getElementById("groupMessage").textContent=""; document.getElementById("groupModal").classList.add("show"); document.getElementById("groupNameInput").focus(); });
+document.getElementById("closeGroupModal").addEventListener("click", () => document.getElementById("groupModal").classList.remove("show"));
+document.getElementById("createGroupBtn").addEventListener("click", createGroup);
+
 /* =========================================================
    START
 ========================================================= */
 
 checkLogin();
 
-</script>
-
-
-<script>
-/* ===== FINAL GROUP / PROFILE / CONTACT UPGRADE ===== */
-let selectedGroup = null;
-let loadedContacts = [];
-
-function upgradeEsc(v){
-  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function upgradeAvatar(item){
-  const src = item?.profile_photo || item?.photo || '';
-  if(src) return `<img src="${upgradeEsc(src)}" alt="">`;
-  return upgradeEsc((item?.name || '?').trim().charAt(0).toUpperCase());
-}
-
-async function loadContactsUpgrade(){
-  try{
-    const [cr, gr] = await Promise.all([fetch('/api/contacts'), fetch('/api/groups')]);
-    const cd = await cr.json();
-    const gd = await gr.json();
-    loadedContacts = cd.success ? (cd.contacts || []) : [];
-    const box = document.getElementById('contacts');
-    if(!box) return;
-    box.innerHTML='';
-    if(gd.success && (gd.groups||[]).length){
-      box.insertAdjacentHTML('beforeend','<div class="list-title">GROUPS</div>');
-      gd.groups.forEach(g=>{
-        const d=document.createElement('div');
-        d.className='contact group-contact'; d.dataset.groupId=g.id;
-        d.innerHTML=`<div class="avatar">${upgradeAvatar(g)}</div><div class="contact-info"><b>${upgradeEsc(g.name)}</b><span>${Number(g.member_count||0)} members</span></div>`;
-        d.onclick=()=>selectGroupUpgrade(g); box.appendChild(d);
-      });
-    }
-    box.insertAdjacentHTML('beforeend','<div class="list-title">CONTACTS</div>');
-    if(loadedContacts.length){
-      loadedContacts.forEach(c=>{
-        const d=document.createElement('div'); d.className='contact'; d.dataset.id=c.id;
-        d.innerHTML=`<div class="avatar">${upgradeAvatar(c)}</div><div class="contact-info"><b>${upgradeEsc(c.name)}</b><span>${upgradeEsc(c.last_message || c.email || '')}</span></div>${Number(c.unread_count||0)?`<span class="unread-badge">${c.unread_count}</span>`:''}`;
-        d.onclick=()=>{selectedGroup=null; selectedContact=c; if(typeof selectContact==='function') selectContact(c);};
-        box.appendChild(d);
-      });
-    } else {
-      box.insertAdjacentHTML('beforeend','<div class="no-contacts">No contacts yet.</div>');
-    }
-  }catch(e){ console.error('CONTACT LIST ERROR',e); }
-}
-
-async function selectGroupUpgrade(g){
-  selectedGroup=g; selectedContact=null;
-  document.querySelectorAll('.contact').forEach(x=>x.classList.remove('active'));
-  document.querySelector(`[data-group-id="${g.id}"]`)?.classList.add('active');
-  const name=document.getElementById('chatName'); if(name) name.textContent=g.name;
-  const status=document.getElementById('chatStatus'); if(status) status.textContent=`${Number(g.member_count||0)} members`;
-  const av=document.getElementById('chatAvatar'); if(av) av.innerHTML=upgradeAvatar(g);
-  const input=document.getElementById('messageInput'); if(input) input.disabled=false;
-  const send=document.getElementById('sendBtn'); if(send) send.disabled=false;
-  const box=document.getElementById('messages'); if(!box) return;
-  box.innerHTML='';
-  const r=await fetch('/api/groups/'+encodeURIComponent(g.id)+'/messages'); const d=await r.json();
-  (d.messages||[]).forEach(addGroupMessageUpgrade); scrollMessages();
-}
-function addGroupMessageUpgrade(m){
-  if(!selectedGroup || Number(m.group_id)!==Number(selectedGroup.id)) return;
-  const box=document.getElementById('messages'); if(!box) return;
-  if(box.querySelector(`[data-group-message-id="${m.id}"]`)) return;
-  const own=currentUser && Number(m.sender_id)===Number(currentUser.id);
-  const d=document.createElement('div'); d.className='message '+(own?'sent':'received'); d.dataset.groupMessageId=m.id;
-  d.innerHTML=`${own?'':`<div class="group-sender">${upgradeEsc(m.sender_name||'')}</div>`}<div class="bubble">${upgradeEsc(String(m.message||'').trim())}</div><div class="message-time">${m.created_at?new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</div>`;
-  box.appendChild(d); scrollMessages();
-}
-
-const originalSendMessage = window.sendMessage;
-window.sendMessage = function(){
-  if(!selectedGroup) return originalSendMessage?.();
-  const input=document.getElementById('messageInput'); const text=(input?.value||'').trim();
-  if(!text) return;
-  if(!socket || !socket.connected){ if(typeof showNotification==='function') showNotification('Connecting...'); return; }
-  socket.emit('send_group_message',{group_id:Number(selectedGroup.id),message:text}); input.value='';
-};
-
-function openProfileModalUpgrade(){
-  const m=document.getElementById('profileModal'); if(!m){alert('Profile window is not available in this version.');return;}
-  m.classList.add('show');
-  fetch('/api/profile').then(r=>r.json()).then(d=>{
-    const u=d.user||d.profile||d;
-    const p=document.getElementById('profilePreview'); if(p) p.innerHTML=upgradeAvatar(u);
-  }).catch(console.error);
-}
-function openGroupModalUpgrade(){
-  const m=document.getElementById('groupModal'); if(!m){alert('New Group window is not available in this version.');return;}
-  const box=document.getElementById('groupMemberList');
-  if(box) box.innerHTML=loadedContacts.map(c=>`<label><input type="checkbox" value="${c.id}"> ${upgradeEsc(c.name)}</label>`).join('') || 'No contacts yet';
-  m.classList.add('show');
-}
-function closeUpgradeModal(id){ document.getElementById(id)?.classList.remove('show'); }
-async function uploadProfilePhotoUpgrade(){
-  const f=document.getElementById('profilePhotoInput')?.files?.[0]; if(!f)return;
-  const fd=new FormData(); fd.append('photo',f);
-  const d=await (await fetch('/api/profile',{method:'POST',body:fd})).json();
-  if(d.success){ const p=document.getElementById('profilePreview'); if(p)p.innerHTML=`<img src="${upgradeEsc(d.profile_photo)}" alt="">`; await loadContactsUpgrade(); closeUpgradeModal('profileModal'); }
-  else alert(d.message||'Could not upload profile photo.');
-}
-async function createGroupUpgrade(){
-  const name=(document.getElementById('groupNameInput')?.value||'').trim();
-  const members=[...document.querySelectorAll('#groupMemberList input:checked')].map(x=>x.value);
-  const msg=document.getElementById('groupMessage');
-  if(!name){if(msg)msg.textContent='Enter a group name.';return;}
-  const fd=new FormData(); fd.append('name',name); fd.append('member_ids',members.join(','));
-  const f=document.getElementById('groupPhotoInput')?.files?.[0]; if(f)fd.append('photo',f);
-  const d=await (await fetch('/api/groups',{method:'POST',body:fd})).json();
-  if(d.success){closeUpgradeModal('groupModal');await loadContactsUpgrade();if(d.group)selectGroupUpgrade(d.group);}
-  else if(msg)msg.textContent=d.message||'Could not create group.';
-}
-
-function wireUpgradeButtons(){
-  const profileBtn=[...document.querySelectorAll('button,a')].find(x=>/profile/i.test(x.textContent||'') && !x.dataset.upgradeWired);
-  if(profileBtn){profileBtn.dataset.upgradeWired='1';profileBtn.onclick=e=>{e.preventDefault();openProfileModalUpgrade();};}
-  const groupBtn=[...document.querySelectorAll('button,a')].find(x=>/new\s*group/i.test(x.textContent||'') && !x.dataset.upgradeWired);
-  if(groupBtn){groupBtn.dataset.upgradeWired='1';groupBtn.onclick=e=>{e.preventDefault();openGroupModalUpgrade();};}
-}
-
-function setupUpgradeSocket(){
-  if(!socket || socket.__upgradeReady) return;
-  socket.__upgradeReady=true;
-  socket.on('new_group_message',m=>{ if(selectedGroup && Number(selectedGroup.id)===Number(m.group_id)) addGroupMessageUpgrade(m); loadContactsUpgrade(); });
-  socket.on('group_created',()=>loadContactsUpgrade());
-}
-const originalConnectSocket=window.connectSocket;
-window.connectSocket=function(){ originalConnectSocket?.(); setTimeout(setupUpgradeSocket,500); };
-window.addEventListener('load',()=>{ setTimeout(()=>{loadContactsUpgrade();wireUpgradeButtons();setupUpgradeSocket();},700); });
-window.openProfileModal=openProfileModalUpgrade;
-window.openGroupModal=openGroupModalUpgrade;
-window.createGroup=createGroupUpgrade;
-window.uploadProfilePhoto=uploadProfilePhotoUpgrade;
-window.loadContacts=loadContactsUpgrade;
-</script>
-
-<script>
-// ===== FINAL UI FIXES =====
-(function(){
-  function byId(id){return document.getElementById(id)}
-  function showModal(id){const el=byId(id); if(el){el.classList.add('show');el.style.display='flex';}}
-  function hideModal(id){const el=byId(id); if(el){el.classList.remove('show');el.style.display='none';}}
-  window.closeUpgradeModal=hideModal;
-
-  // Make Profile/New Group controls work even if inline handlers are missing.
-  document.addEventListener('click', function(e){
-    const t=e.target.closest('#profileBtn,[data-action="profile"],.profile-btn,#newGroupBtn,[data-action="new-group"],.new-group-btn');
-    if(!t) return;
-    e.preventDefault();
-    if(t.id==='profileBtn'||t.dataset.action==='profile'||t.classList.contains('profile-btn')) {
-      if(typeof window.openProfileModal==='function') window.openProfileModal();
-      else showModal('profileModal');
-    } else {
-      if(typeof window.openGroupModal==='function') window.openGroupModal();
-      else showModal('groupModal');
-    }
-  });
-
-  // Prevent contacts from disappearing after selecting an incoming chat.
-  const originalSelect = window.selectContact;
-  window.selectContact = async function(contact){
-    window.selectedContact = contact;
-    window.selectedGroup = null;
-    if(typeof originalSelect==='function') return originalSelect.apply(this, arguments);
-    const name=contact.custom_name||contact.name||contact.email||'Chat';
-    const n=byId('chatName'), s=byId('chatStatus');
-    if(n)n.textContent=name; if(s)s.textContent=contact.email||'';
-    try { await window.loadMessages(contact.id); } catch(e){ console.error(e); }
-  };
-
-  // Always reload the real server-side contact/chat list after an incoming message.
-  if(window.socket){
-    window.socket.on('new_message', function(){
-      if(typeof window.loadContacts==='function') setTimeout(window.loadContacts,80);
-    });
-  }
-
-  // Fix custom contact display name whenever the API provides one.
-  const oldLoad = window.loadContacts;
-  if(typeof oldLoad==='function'){
-    window.loadContacts = async function(){
-      const result=await oldLoad.apply(this,arguments);
-      document.querySelectorAll('.contact[data-id]').forEach(el=>{
-        const id=Number(el.dataset.id);
-        const c=(window.loadedContacts||[]).find(x=>Number(x.id)===id);
-        if(c){const name=el.querySelector('.contact-name,.contact-info b'); if(name) name.textContent=c.custom_name||c.name||c.email;}
-      });
-      return result;
-    };
-  }
-})();
 </script>
 
 </body>
