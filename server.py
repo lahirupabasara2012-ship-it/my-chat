@@ -276,6 +276,40 @@ def init_db():
 
 
         # -------------------------------------------------
+        # GROUPS
+        # -------------------------------------------------
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                owner_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS group_members (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                UNIQUE(group_id, user_id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL,
+                sender_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cur.execute("""CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)""")
+        cur.execute("""CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages(group_id, id)""")
+
+        # -------------------------------------------------
         # SAFE MIGRATION
         # -------------------------------------------------
 
@@ -1369,6 +1403,134 @@ def get_contacts():
         if conn:
             conn.close()
 
+
+
+# =========================================================
+# PROFILE
+# =========================================================
+@app.route("/api/profile", methods=["PUT"])
+def update_profile():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    if not name:
+        return jsonify({"success": False, "message": "Name is required."}), 400
+    conn = cur = None
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("UPDATE users SET name=%s WHERE id=%s RETURNING id,name,email", (name, user_id))
+        user = cur.fetchone(); conn.commit()
+        return jsonify({"success": True, "user": dict(user)})
+    except Exception as e:
+        if conn: conn.rollback()
+        print("PROFILE ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not update profile."}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+# =========================================================
+# GROUPS
+# =========================================================
+@app.route("/api/groups", methods=["GET"])
+def get_groups():
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"success": False, "groups": []}), 401
+    conn = cur = None
+    try:
+        conn=get_db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT g.id, g.name, g.owner_id,
+                   (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id=g.id) AS member_count,
+                   (SELECT gm.message FROM group_messages gm WHERE gm.group_id=g.id ORDER BY gm.id DESC LIMIT 1) AS last_message
+            FROM groups g JOIN group_members gm ON gm.group_id=g.id
+            WHERE gm.user_id=%s ORDER BY g.id DESC
+        """, (user_id,))
+        groups=[dict(x) for x in cur.fetchall()]
+        return jsonify({"success":True,"groups":groups})
+    except Exception as e:
+        print("GROUPS ERROR:",repr(e)); return jsonify({"success":False,"groups":[]}),500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route("/api/groups", methods=["POST"])
+def create_group():
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"success":False,"message":"Please login first."}),401
+    data=request.get_json(silent=True) or {}
+    name=str(data.get("name","")).strip()
+    emails=data.get("emails",[])
+    if not name: return jsonify({"success":False,"message":"Group name is required."}),400
+    if not isinstance(emails,list): emails=[]
+    conn=cur=None
+    try:
+        conn=get_db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("INSERT INTO groups(name,owner_id) VALUES(%s,%s) RETURNING id,name,owner_id",(name,user_id))
+        group=cur.fetchone(); gid=group["id"]
+        member_ids={int(user_id)}
+        for email in emails:
+            email=str(email).strip().lower()
+            if not email: continue
+            cur.execute("SELECT id FROM users WHERE email=%s",(email,)); u=cur.fetchone()
+            if u: member_ids.add(int(u["id"]))
+        for mid in member_ids:
+            cur.execute("INSERT INTO group_members(group_id,user_id) VALUES(%s,%s) ON CONFLICT DO NOTHING",(gid,mid))
+        conn.commit()
+        return jsonify({"success":True,"group":{"id":gid,"name":group["name"],"owner_id":group["owner_id"],"member_count":len(member_ids)}})
+    except Exception as e:
+        if conn: conn.rollback()
+        print("CREATE GROUP ERROR:",repr(e)); return jsonify({"success":False,"message":"Could not create group."}),500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route("/api/groups/<int:group_id>/messages")
+def get_group_messages(group_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"success":False,"messages":[]}),401
+    conn=cur=None
+    try:
+        conn=get_db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s",(group_id,user_id))
+        if not cur.fetchone(): return jsonify({"success":False,"messages":[]}),403
+        cur.execute("""SELECT gm.id,gm.group_id,gm.sender_id,gm.message,gm.created_at,u.name AS sender_name FROM group_messages gm JOIN users u ON u.id=gm.sender_id WHERE gm.group_id=%s ORDER BY gm.id ASC""",(group_id,))
+        msgs=[]
+        for m in cur.fetchall():
+            x=dict(m); x["created_at"]=str(x["created_at"]); msgs.append(x)
+        return jsonify({"success":True,"messages":msgs})
+    except Exception as e:
+        print("GROUP MESSAGES ERROR:",repr(e)); return jsonify({"success":False,"messages":[]}),500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@socketio.on("send_group_message")
+def socket_send_group_message(data):
+    user_id=session.get("user_id")
+    if not user_id or not isinstance(data,dict): return
+    try: gid=int(data.get("group_id"))
+    except: return
+    message=str(data.get("message","")).strip()
+    if not gid or not message: return
+    conn=cur=None
+    try:
+        conn=get_db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s",(gid,user_id))
+        if not cur.fetchone(): emit("message_error",{"message":"You are not a member of this group."}); return
+        cur.execute("INSERT INTO group_messages(group_id,sender_id,message) VALUES(%s,%s,%s) RETURNING id,group_id,sender_id,message,created_at",(gid,user_id,message))
+        m=dict(cur.fetchone()); conn.commit()
+        cur.execute("SELECT name FROM users WHERE id=%s",(user_id,)); m["sender_name"]=cur.fetchone()["name"]; m["created_at"]=str(m["created_at"])
+        cur.execute("SELECT user_id FROM group_members WHERE group_id=%s",(gid,)); members=[r["user_id"] for r in cur.fetchall()]
+        for mid in members: socketio.emit("group_message",m,room="user_"+str(mid))
+    except Exception as e:
+        if conn: conn.rollback()
+        print("GROUP SEND ERROR:",repr(e)); emit("message_error",{"message":"Group message could not be sent."})
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 # =========================================================
 # GET USER BY ID
