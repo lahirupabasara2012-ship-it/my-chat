@@ -1869,34 +1869,8 @@ def socket_send_message(
         )
 
 
-        # -------------------------------------------------
-        # DELIVERY CONFIRMATION
-        # -------------------------------------------------
-
-        socketio.emit(
-            "message_delivered",
-            {
-                "message_id":
-                    saved["id"],
-
-                "sender_id":
-                    int(
-                        sender_id
-                    ),
-
-                "receiver_id":
-                    int(
-                        receiver_id
-                    )
-            },
-            room=
-                "user_"
-                +
-                str(
-                    sender_id
-                )
-        )
-
+        # Delivery is confirmed by the receiver client after it
+        # actually receives the message over Socket.IO.
 
         # -------------------------------------------------
         # SENDER CONFIRMATION
@@ -2280,34 +2254,8 @@ def upload_file():
     )
 
 
-    # -----------------------------------------------------
-    # DELIVERY CONFIRMATION
-    # -----------------------------------------------------
-
-    socketio.emit(
-        "message_delivered",
-        {
-            "message_id":
-                saved["id"],
-
-            "sender_id":
-                int(
-                    sender_id
-                ),
-
-            "receiver_id":
-                int(
-                    receiver_id
-                )
-        },
-        room=
-            "user_"
-            +
-            str(
-                sender_id
-            )
-    )
-
+    # Delivery is confirmed by the receiver client after it
+    # actually receives the message over Socket.IO.
 
     # -----------------------------------------------------
     # SENDER
@@ -2434,6 +2382,72 @@ def mark_read(
         if cur:
             cur.close()
 
+        if conn:
+            conn.close()
+
+
+# =========================================================
+# SOCKET DELIVERY ACK
+# =========================================================
+
+@socketio.on(
+    "message_delivered_ack"
+)
+def socket_message_delivered_ack(data):
+
+    receiver_id = session.get("user_id")
+
+    if not receiver_id or not isinstance(data, dict):
+        return
+
+    try:
+        message_id = int(data.get("message_id"))
+        sender_id = int(data.get("sender_id"))
+    except (TypeError, ValueError):
+        return
+
+    if not message_id or not sender_id or sender_id == int(receiver_id):
+        return
+
+    conn = None
+    cur = None
+
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT id, sender_id, receiver_id
+            FROM messages
+            WHERE id = %s
+            AND sender_id = %s
+            AND receiver_id = %s
+            """,
+            (message_id, sender_id, int(receiver_id))
+        )
+
+        message = cur.fetchone()
+
+        if not message:
+            return
+
+        socketio.emit(
+            "message_delivered",
+            {
+                "message_id": message_id,
+                "sender_id": sender_id,
+                "receiver_id": int(receiver_id)
+            },
+            room="user_" + str(sender_id)
+        )
+
+    except Exception as e:
+        print("DELIVERY ACK ERROR:", repr(e))
+
+    finally:
+        if cur:
+            cur.close()
         if conn:
             conn.close()
 
