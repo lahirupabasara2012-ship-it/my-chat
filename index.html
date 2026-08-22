@@ -726,24 +726,40 @@ function connectSocket() {
                 return;
             }
 
+            console.log(
+                "MESSAGES READ:",
+                data
+            );
 
-            const contactId =
-                Number(
-                    data.contact_id
-                );
+            // Update only the exact messages that the other user read.
+            // This makes the blue ✓✓ change immediately without waiting
+            // for a reload or relying on the currently selected chat.
+            const messageIds =
+                Array.isArray(data.message_ids)
+                    ? data.message_ids
+                    : [];
 
+            messageIds.forEach(
+                function(messageId) {
+                    updateMessageStatus(
+                        Number(messageId),
+                        "seen"
+                    );
+                }
+            );
 
-            if (
-                selectedContact &&
-                Number(
-                    selectedContact.id
-                ) === contactId
-            ) {
+            // Backwards compatibility with older server payloads.
+            if (messageIds.length === 0) {
+                const contactId =
+                    Number(data.contact_id);
 
-                markVisibleMessagesAsSeen();
-
+                if (
+                    selectedContact &&
+                    Number(selectedContact.id) === contactId
+                ) {
+                    markVisibleMessagesAsSeen();
+                }
             }
-
         }
     );
 
@@ -804,40 +820,19 @@ function connectSocket() {
 
 
                 /*
-                 * Mark as read immediately.
+                 * The message is visible in the currently open chat,
+                 * so acknowledge it as read immediately over Socket.IO.
+                 * The server persists is_read=1 and broadcasts the exact
+                 * message IDs back to the sender in real time.
                  */
-
-                try {
-
-                    await fetch(
-                        "/api/messages/" +
-                        senderId +
-                        "/read",
+                if (socket) {
+                    socket.emit(
+                        "mark_read",
                         {
-                            method: "POST"
+                            contact_id:
+                                senderId
                         }
                     );
-
-
-                    if (socket) {
-
-                        socket.emit(
-                            "mark_read",
-                            {
-                                contact_id:
-                                    senderId
-                            }
-                        );
-
-                    }
-
-                } catch (error) {
-
-                    console.error(
-                        "Read status error:",
-                        error
-                    );
-
                 }
 
 
@@ -1929,47 +1924,23 @@ async function selectContact(
     hideTypingIndicator();
 
 
-    /*
-     * Mark messages read.
-     */
-
-    try {
-
-        await fetch(
-            "/api/messages/" +
-            contact.id +
-            "/read",
-            {
-                method: "POST"
-            }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Read error:",
-            error
-        );
-
-    }
+    // Load the conversation first, then tell the server that the
+    // receiver is actually looking at this chat. The server will
+    // broadcast the exact read message IDs back to the sender.
+    await loadMessages(
+        contact.id
+    );
 
 
     if (socket) {
-
         socket.emit(
             "mark_read",
             {
                 contact_id:
-                    contact.id
+                    Number(contact.id)
             }
         );
-
     }
-
-
-    await loadMessages(
-        contact.id
-    );
 
 
     loadContacts();
