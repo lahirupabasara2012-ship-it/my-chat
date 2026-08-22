@@ -2470,3 +2470,26 @@ input {
     }
 
 }
+
+/* =========================================================
+   FIXED HEADER / GROUP / PROFILE UI
+========================================================= */
+.header-actions{display:flex;gap:7px;align-items:center}
+.logout-btn{width:39px;height:39px;min-width:39px;border:0;border-radius:50%;background:rgba(255,255,255,.17);color:#fff;cursor:pointer;font-size:16px}
+.logout-btn:hover{background:rgba(255,255,255,.28)}
+.sidebar-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 12px 10px}
+.sidebar-actions button{margin:0!important}
+.new-group-btn{padding:11px 9px;border:0;border-radius:9px;background:#075e54;color:#fff;font-weight:bold;cursor:pointer}
+.new-group-btn:hover{background:#064e47}
+.section-title{font-size:11px;font-weight:bold;color:#888;text-transform:uppercase;padding:6px 14px;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
+.groups{max-height:210px;overflow-y:auto}
+.group-item{min-height:62px}
+.group-avatar{font-size:20px;background:linear-gradient(135deg,#6c5ce7,#8e7dff)}
+.no-groups{padding:12px 14px;color:#999;font-size:12px}
+.profile-large-avatar{width:78px;height:78px;border-radius:50%;margin:4px auto 18px;background:linear-gradient(135deg,#128c7e,#25d366);color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:bold}
+.profile-modal-box input,.modal-box textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;margin-bottom:10px;resize:vertical;font-family:inherit}
+.profile-modal-box input:disabled{background:#f1f1f1;color:#777}
+.wide-btn{width:100%!important;border-radius:10px!important;padding:12px!important}
+.modal-message{text-align:center;min-height:18px;margin-top:10px}
+.group-sender{font-size:11px;color:#666;margin:0 0 3px 4px;font-weight:bold}
+@media(max-width:700px){.sidebar-actions{grid-template-columns:1fr 1fr}.groups{max-height:170px}}
