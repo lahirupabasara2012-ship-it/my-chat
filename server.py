@@ -24,8 +24,8 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 is_render = os.environ.get("RENDER", "").lower() == "true"
-
 app.config["SESSION_COOKIE_SECURE"] = is_render
+
 
 # =========================================================
 # SOCKET.IO
@@ -49,7 +49,6 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 def get_db():
-
     if not DATABASE_URL:
         raise RuntimeError(
             "DATABASE_URL environment variable is missing."
@@ -91,7 +90,6 @@ app.config["MAX_CONTENT_LENGTH"] = (
     100 * 1024 * 1024
 )
 
-
 ALLOWED_EXTENSIONS = {
     "png",
     "jpg",
@@ -121,15 +119,12 @@ online_users = {}
 
 
 def add_online_user(user_id, sid):
-
     user_id = int(user_id)
 
     if user_id not in online_users:
         online_users[user_id] = set()
 
-    was_offline = (
-        len(online_users[user_id]) == 0
-    )
+    was_offline = len(online_users[user_id]) == 0
 
     online_users[user_id].add(sid)
 
@@ -137,7 +132,6 @@ def add_online_user(user_id, sid):
 
 
 def remove_online_user(user_id, sid):
-
     if not user_id:
         return False
 
@@ -151,32 +145,26 @@ def remove_online_user(user_id, sid):
     sessions.discard(sid)
 
     if not sessions:
-
-        online_users.pop(
-            user_id,
-            None
-        )
-
+        online_users.pop(user_id, None)
         return True
 
     return False
 
 
 def is_user_online(user_id):
+    user_id = int(user_id)
 
     return (
-        int(user_id) in online_users
-        and bool(online_users[int(user_id)])
+        user_id in online_users
+        and bool(online_users[user_id])
     )
 
 
 def get_online_user_ids():
-
     return list(online_users.keys())
 
 
 def broadcast_presence(user_id, online):
-
     socketio.emit(
         "user_status",
         {
@@ -191,14 +179,11 @@ def broadcast_presence(user_id, online):
 # =========================================================
 
 def init_db():
-
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
-
         cur = conn.cursor()
 
         # USERS
@@ -246,6 +231,7 @@ def init_db():
             )
         """)
 
+        # GROUP MEMBERS
         cur.execute("""
             CREATE TABLE IF NOT EXISTS group_members (
                 id SERIAL PRIMARY KEY,
@@ -255,6 +241,7 @@ def init_db():
             )
         """)
 
+        # GROUP MESSAGES
         cur.execute("""
             CREATE TABLE IF NOT EXISTS group_messages (
                 id SERIAL PRIMARY KEY,
@@ -309,12 +296,9 @@ def init_db():
 
         conn.commit()
 
-        print(
-            "PostgreSQL database initialized successfully."
-        )
+        print("PostgreSQL database initialized successfully.")
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -326,7 +310,6 @@ def init_db():
         raise
 
     finally:
-
         if cur:
             cur.close()
 
@@ -339,27 +322,20 @@ def init_db():
 # =========================================================
 
 def allowed_file(filename):
-
     if not filename or "." not in filename:
         return False
 
-    extension = filename.rsplit(
-        ".",
-        1
-    )[1].lower()
+    extension = filename.rsplit(".", 1)[1].lower()
 
     return extension in ALLOWED_EXTENSIONS
 
 
 def user_exists(user_id):
-
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
-
         cur = conn.cursor()
 
         cur.execute(
@@ -370,7 +346,6 @@ def user_exists(user_id):
         return cur.fetchone() is not None
 
     finally:
-
         if cur:
             cur.close()
 
@@ -379,17 +354,14 @@ def user_exists(user_id):
 
 
 def get_message(message_id):
-
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -410,18 +382,14 @@ def get_message(message_id):
         row = cur.fetchone()
 
         if row:
-
             row = dict(row)
 
             if row.get("created_at"):
-                row["created_at"] = str(
-                    row["created_at"]
-                )
+                row["created_at"] = str(row["created_at"])
 
         return row
 
     finally:
-
         if cur:
             cur.close()
 
@@ -437,17 +405,14 @@ def save_message(
     file_name=None,
     file_url=None
 ):
-
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -473,22 +438,19 @@ def save_message(
             file_url
         ))
 
-        message_id =
-            cur.fetchone()["id"]
+        message_id = cur.fetchone()["id"]
 
         conn.commit()
 
         return get_message(message_id)
 
     except Exception:
-
         if conn:
             conn.rollback()
 
         raise
 
     finally:
-
         if cur:
             cur.close()
 
@@ -502,7 +464,6 @@ def save_message(
 
 @app.route("/health")
 def health():
-
     return jsonify({
         "success": True,
         "status": "ok",
@@ -516,7 +477,6 @@ def health():
 
 @app.route("/")
 def home():
-
     return send_from_directory(
         BASE_DIR,
         "index.html"
@@ -525,7 +485,6 @@ def home():
 
 @app.route("/style.css")
 def css():
-
     return send_from_directory(
         BASE_DIR,
         "style.css"
@@ -534,7 +493,6 @@ def css():
 
 @app.route("/app.js")
 def javascript():
-
     return send_from_directory(
         BASE_DIR,
         "app.js"
@@ -543,7 +501,6 @@ def javascript():
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
-
     return send_from_directory(
         UPLOAD_FOLDER,
         filename
@@ -554,53 +511,34 @@ def uploaded_file(filename):
 # SIGNUP
 # =========================================================
 
-@app.route(
-    "/api/signup",
-    methods=["POST"]
-)
+@app.route("/api/signup", methods=["POST"])
 def signup():
+    data = request.get_json(silent=True) or {}
 
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    name = str(
-        data.get("name", "")
-    ).strip()
-
-    email = str(
-        data.get("email", "")
-    ).strip().lower()
-
-    password = str(
-        data.get("password", "")
-    )
+    name = str(data.get("name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    password = str(data.get("password", ""))
 
     if not name or not email or not password:
-
         return jsonify({
             "success": False,
             "message": "All fields are required."
         }), 400
 
     if len(password) < 6:
-
         return jsonify({
             "success": False,
-            "message":
-                "Password must be at least 6 characters."
+            "message": "Password must be at least 6 characters."
         }), 400
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute(
@@ -609,15 +547,12 @@ def signup():
         )
 
         if cur.fetchone():
-
             return jsonify({
                 "success": False,
-                "message":
-                    "This email is already registered."
+                "message": "This email is already registered."
             }), 409
 
-        password_hash =
-            generate_password_hash(password)
+        password_hash = generate_password_hash(password)
 
         cur.execute("""
             INSERT INTO users
@@ -640,7 +575,6 @@ def signup():
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -651,12 +585,10 @@ def signup():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not create account."
+            "message": "Could not create account."
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -668,42 +600,28 @@ def signup():
 # LOGIN
 # =========================================================
 
-@app.route(
-    "/api/login",
-    methods=["POST"]
-)
+@app.route("/api/login", methods=["POST"])
 def login():
+    data = request.get_json(silent=True) or {}
 
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    email = str(
-        data.get("email", "")
-    ).strip().lower()
-
-    password = str(
-        data.get("password", "")
-    )
+    email = str(data.get("email", "")).strip().lower()
+    password = str(data.get("password", ""))
 
     if not email or not password:
-
         return jsonify({
             "success": False,
-            "message":
-                "Email and password are required."
+            "message": "Email and password are required."
         }), 400
 
     conn = None
     cur = None
+    user = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -720,7 +638,6 @@ def login():
         user = cur.fetchone()
 
     except Exception as e:
-
         print(
             "LOGIN DATABASE ERROR:",
             repr(e)
@@ -732,7 +649,6 @@ def login():
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -743,17 +659,13 @@ def login():
         user["password"],
         password
     ):
-
         return jsonify({
             "success": False,
-            "message":
-                "Email or password is incorrect."
+            "message": "Email or password is incorrect."
         }), 401
 
     session.clear()
-
     session["user_id"] = user["id"]
-
     session.modified = True
 
     return jsonify({
@@ -773,25 +685,22 @@ def login():
 
 @app.route("/api/me")
 def current_user():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "logged_in": False
         })
 
     conn = None
     cur = None
+    user = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -807,7 +716,6 @@ def current_user():
         user = cur.fetchone()
 
     finally:
-
         if cur:
             cur.close()
 
@@ -815,7 +723,6 @@ def current_user():
             conn.close()
 
     if not user:
-
         session.clear()
 
         return jsonify({
@@ -832,16 +739,11 @@ def current_user():
 # LOGOUT
 # =========================================================
 
-@app.route(
-    "/api/logout",
-    methods=["POST"]
-)
+@app.route("/api/logout", methods=["POST"])
 def logout():
-
     user_id = session.get("user_id")
 
     if user_id:
-
         socketio.emit(
             "user_status",
             {
@@ -861,47 +763,36 @@ def logout():
 # ADD CONTACT
 # =========================================================
 
-@app.route(
-    "/api/add-contact",
-    methods=["POST"]
-)
+@app.route("/api/add-contact", methods=["POST"])
 def add_contact():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
             "message": "Please login first."
         }), 401
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    data = request.get_json(silent=True) or {}
 
     email = str(
         data.get("email", "")
     ).strip().lower()
 
     if not email:
-
         return jsonify({
             "success": False,
-            "message":
-                "Enter an email address."
+            "message": "Enter an email address."
         }), 400
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -917,19 +808,15 @@ def add_contact():
         contact = cur.fetchone()
 
         if not contact:
-
             return jsonify({
                 "success": False,
-                "message":
-                    "No account found with this email."
+                "message": "No account found with this email."
             }), 404
 
         if int(contact["id"]) == int(user_id):
-
             return jsonify({
                 "success": False,
-                "message":
-                    "You cannot add yourself."
+                "message": "You cannot add yourself."
             }), 400
 
         cur.execute("""
@@ -943,11 +830,9 @@ def add_contact():
         ))
 
         if cur.fetchone():
-
             return jsonify({
                 "success": False,
-                "message":
-                    "This contact is already added."
+                "message": "This contact is already added."
             }), 409
 
         cur.execute("""
@@ -959,7 +844,6 @@ def add_contact():
             contact["id"]
         ))
 
-        # Make it mutual so both users see each other.
         cur.execute("""
             INSERT INTO contacts
             (user_id,contact_id)
@@ -979,13 +863,11 @@ def add_contact():
                 "name": contact["name"],
                 "email": contact["email"],
                 "avatar_url": contact["avatar_url"],
-                "online":
-                    is_user_online(contact["id"])
+                "online": is_user_online(contact["id"])
             }
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -996,12 +878,10 @@ def add_contact():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not add contact."
+            "message": "Could not add contact."
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1015,11 +895,9 @@ def add_contact():
 
 @app.route("/api/contacts")
 def get_contacts():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
             "contacts": []
@@ -1029,12 +907,10 @@ def get_contacts():
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1071,13 +947,10 @@ def get_contacts():
         ))
 
         users = cur.fetchall()
-
         result = []
 
         for user in users:
-
-            contact_id =
-                int(user["id"])
+            contact_id = int(user["id"])
 
             cur.execute("""
                 SELECT COUNT(*) AS count
@@ -1090,8 +963,9 @@ def get_contacts():
                 user_id
             ))
 
-            unread =
-                int(cur.fetchone()["count"])
+            unread = int(
+                cur.fetchone()["count"]
+            )
 
             cur.execute("""
                 SELECT
@@ -1123,7 +997,6 @@ def get_contacts():
             preview = ""
 
             if last:
-
                 if last["message_type"] == "image":
                     preview = "📷 Photo"
 
@@ -1133,8 +1006,7 @@ def get_contacts():
                 elif last["message_type"] == "file":
                     preview = (
                         "📎 "
-                        +
-                        (last["file_name"] or "File")
+                        + (last["file_name"] or "File")
                     )
 
                 else:
@@ -1148,8 +1020,7 @@ def get_contacts():
                 "unread": unread,
                 "unread_count": unread,
                 "last_message": preview,
-                "online":
-                    is_user_online(contact_id)
+                "online": is_user_online(contact_id)
             })
 
         return jsonify({
@@ -1158,7 +1029,6 @@ def get_contacts():
         })
 
     except Exception as e:
-
         print(
             "CONTACTS ERROR:",
             repr(e)
@@ -1167,12 +1037,10 @@ def get_contacts():
         return jsonify({
             "success": False,
             "contacts": [],
-            "message":
-                "Could not load contacts."
+            "message": "Could not load contacts."
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1184,48 +1052,36 @@ def get_contacts():
 # PROFILE UPDATE
 # =========================================================
 
-@app.route(
-    "/api/profile",
-    methods=["PUT"]
-)
+@app.route("/api/profile", methods=["PUT"])
 def update_profile():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
-            "message":
-                "Please login first."
+            "message": "Please login first."
         }), 401
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    data = request.get_json(silent=True) or {}
 
     name = str(
         data.get("name", "")
     ).strip()
 
     if not name:
-
         return jsonify({
             "success": False,
-            "message":
-                "Name is required."
+            "message": "Name is required."
         }), 400
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1238,7 +1094,17 @@ def update_profile():
             user_id
         ))
 
-        user = dict(cur.fetchone())
+        row = cur.fetchone()
+
+        if not row:
+            conn.rollback()
+
+            return jsonify({
+                "success": False,
+                "message": "User not found."
+            }), 404
+
+        user = dict(row)
 
         conn.commit()
 
@@ -1248,7 +1114,6 @@ def update_profile():
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -1259,12 +1124,10 @@ def update_profile():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not update profile."
+            "message": "Could not update profile."
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1276,38 +1139,28 @@ def update_profile():
 # PROFILE PHOTO
 # =========================================================
 
-@app.route(
-    "/api/profile/photo",
-    methods=["POST"]
-)
+@app.route("/api/profile/photo", methods=["POST"])
 def profile_photo():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
-            "message":
-                "Please login first."
+            "message": "Please login first."
         }), 401
 
     if "photo" not in request.files:
-
         return jsonify({
             "success": False,
-            "message":
-                "No photo selected."
+            "message": "No photo selected."
         }), 400
 
     photo = request.files["photo"]
 
     if not photo.filename:
-
         return jsonify({
             "success": False,
-            "message":
-                "No photo selected."
+            "message": "No photo selected."
         }), 400
 
     allowed_images = {
@@ -1323,30 +1176,29 @@ def profile_photo():
     )
 
     if not original or "." not in original:
-
         return jsonify({
             "success": False,
-            "message":
-                "Invalid image."
+            "message": "Invalid image."
         }), 400
 
-    extension =
-        original.rsplit(".", 1)[1].lower()
+    extension = original.rsplit(
+        ".",
+        1
+    )[1].lower()
 
     if extension not in allowed_images:
-
         return jsonify({
             "success": False,
-            "message":
-                "Only JPG, PNG, GIF and WEBP are allowed."
+            "message": "Only JPG, PNG, GIF and WEBP are allowed."
         }), 400
 
-    if photo.content_length and photo.content_length > 10 * 1024 * 1024:
-
+    if (
+        photo.content_length
+        and photo.content_length > 10 * 1024 * 1024
+    ):
         return jsonify({
             "success": False,
-            "message":
-                "Profile photo must be smaller than 10MB."
+            "message": "Profile photo must be smaller than 10MB."
         }), 400
 
     filename = (
@@ -1364,17 +1216,14 @@ def profile_photo():
     )
 
     try:
-
         photo.save(path)
 
-        avatar_url =
-            "/uploads/" + filename
+        avatar_url = "/uploads/" + filename
 
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1387,7 +1236,17 @@ def profile_photo():
             user_id
         ))
 
-        user = dict(cur.fetchone())
+        row = cur.fetchone()
+
+        if not row:
+            conn.rollback()
+
+            return jsonify({
+                "success": False,
+                "message": "User not found."
+            }), 404
+
+        user = dict(row)
 
         conn.commit()
 
@@ -1400,41 +1259,32 @@ def profile_photo():
         })
 
     except Exception as e:
-
         print(
             "PROFILE PHOTO ERROR:",
             repr(e)
         )
 
         try:
-
             if os.path.exists(path):
                 os.remove(path)
-
         except Exception:
             pass
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not upload profile photo."
+            "message": "Could not upload profile photo."
         }), 500
 
 
 # =========================================================
-# GROUPS
+# GROUPS - GET
 # =========================================================
 
-@app.route(
-    "/api/groups",
-    methods=["GET"]
-)
+@app.route("/api/groups", methods=["GET"])
 def get_groups():
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
             "groups": []
@@ -1444,12 +1294,10 @@ def get_groups():
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1480,7 +1328,6 @@ def get_groups():
         })
 
     except Exception as e:
-
         print(
             "GROUPS ERROR:",
             repr(e)
@@ -1492,7 +1339,6 @@ def get_groups():
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1500,55 +1346,48 @@ def get_groups():
             conn.close()
 
 
-@app.route(
-    "/api/groups",
-    methods=["POST"]
-)
-def create_group():
+# =========================================================
+# GROUPS - CREATE
+# =========================================================
 
+@app.route("/api/groups", methods=["POST"])
+def create_group():
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
-            "message":
-                "Please login first."
+            "message": "Please login first."
         }), 401
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    data = request.get_json(silent=True) or {}
 
     name = str(
         data.get("name", "")
     ).strip()
 
-    member_ids =
-        data.get("member_ids", [])
+    member_ids = data.get(
+        "member_ids",
+        []
+    )
 
     if not name:
-
         return jsonify({
             "success": False,
-            "message":
-                "Group name is required."
+            "message": "Group name is required."
         }), 400
 
     if not isinstance(member_ids, list):
-
         member_ids = []
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1563,18 +1402,18 @@ def create_group():
 
         group = dict(cur.fetchone())
 
-        group_id =
-            int(group["id"])
+        group_id = int(
+            group["id"]
+        )
 
         members = {
             int(user_id)
         }
 
         for member_id in member_ids:
-
             try:
                 member_id = int(member_id)
-            except:
+            except (TypeError, ValueError):
                 continue
 
             if member_id == int(user_id):
@@ -1589,7 +1428,6 @@ def create_group():
                 members.add(member_id)
 
         for member_id in members:
-
             cur.execute("""
                 INSERT INTO group_members
                 (group_id,user_id)
@@ -1613,7 +1451,6 @@ def create_group():
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -1624,12 +1461,10 @@ def create_group():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not create group."
+            "message": "Could not create group."
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1641,15 +1476,11 @@ def create_group():
 # GROUP MESSAGES
 # =========================================================
 
-@app.route(
-    "/api/groups/<int:group_id>/messages"
-)
+@app.route("/api/groups/<int:group_id>/messages")
 def get_group_messages(group_id):
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
             "messages": []
@@ -1659,12 +1490,10 @@ def get_group_messages(group_id):
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -1678,7 +1507,6 @@ def get_group_messages(group_id):
         ))
 
         if not cur.fetchone():
-
             return jsonify({
                 "success": False,
                 "messages": []
@@ -1702,11 +1530,11 @@ def get_group_messages(group_id):
         messages = []
 
         for row in cur.fetchall():
-
             item = dict(row)
 
-            item["created_at"] =
-                str(item["created_at"])
+            item["created_at"] = str(
+                item["created_at"]
+            )
 
             messages.append(item)
 
@@ -1716,7 +1544,6 @@ def get_group_messages(group_id):
         })
 
     except Exception as e:
-
         print(
             "GROUP MESSAGES ERROR:",
             repr(e)
@@ -1728,7 +1555,6 @@ def get_group_messages(group_id):
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1737,25 +1563,20 @@ def get_group_messages(group_id):
 
 
 # =========================================================
-# PRIVATE MESSAGES
+# PRIVATE MESSAGES - GET
 # =========================================================
 
-@app.route(
-    "/api/messages/<int:contact_id>"
-)
+@app.route("/api/messages/<int:contact_id>")
 def get_messages(contact_id):
-
     user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False,
             "messages": []
         }), 401
 
     if not user_exists(contact_id):
-
         return jsonify({
             "success": False,
             "messages": []
@@ -1765,15 +1586,13 @@ def get_messages(contact_id):
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
-        # Mark incoming messages read.
+        # Mark incoming messages as read.
         cur.execute("""
             UPDATE messages
             SET is_read=1
@@ -1818,11 +1637,11 @@ def get_messages(contact_id):
         messages = []
 
         for row in cur.fetchall():
-
             item = dict(row)
 
-            item["created_at"] =
-                str(item["created_at"])
+            item["created_at"] = str(
+                item["created_at"]
+            )
 
             messages.append(item)
 
@@ -1834,7 +1653,6 @@ def get_messages(contact_id):
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -1849,7 +1667,6 @@ def get_messages(contact_id):
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -1863,72 +1680,57 @@ def get_messages(contact_id):
 
 @socketio.on("send_message")
 def socket_send_message(data):
-
-    sender_id =
-        session.get("user_id")
+    sender_id = session.get("user_id")
 
     if not sender_id:
-
         emit(
             "message_error",
             {
-                "message":
-                    "You are not logged in."
+                "message": "You are not logged in."
             }
         )
-
         return
 
     if not isinstance(data, dict):
         return
 
     try:
-
-        receiver_id =
-            int(data.get("receiver_id"))
-
-    except:
-
+        receiver_id = int(
+            data.get("receiver_id")
+        )
+    except (TypeError, ValueError):
         emit(
             "message_error",
             {
-                "message":
-                    "Invalid receiver."
+                "message": "Invalid receiver."
             }
         )
-
         return
 
-    message =
-        str(data.get("message", "")).strip()
+    message = str(
+        data.get("message", "")
+    ).strip()
 
     if not message:
         return
 
     if receiver_id == int(sender_id):
-
         emit(
             "message_error",
             {
-                "message":
-                    "You cannot message yourself."
+                "message": "You cannot message yourself."
             }
         )
-
         return
 
     try:
-
         if not user_exists(receiver_id):
-
             emit(
                 "message_error",
                 {
-                    "message":
-                        "Receiver account was not found."
+                    "message": "Receiver account was not found."
                 }
             )
-
             return
 
         saved = save_message(
@@ -1950,7 +1752,6 @@ def socket_send_message(data):
         )
 
     except Exception as e:
-
         print(
             "SEND MESSAGE ERROR:",
             repr(e)
@@ -1959,8 +1760,7 @@ def socket_send_message(data):
         emit(
             "message_error",
             {
-                "message":
-                    "Message could not be sent."
+                "message": "Message could not be sent."
             }
         )
 
@@ -1971,9 +1771,7 @@ def socket_send_message(data):
 
 @socketio.on("send_group_message")
 def socket_send_group_message(data):
-
-    user_id =
-        session.get("user_id")
+    user_id = session.get("user_id")
 
     if not user_id:
         return
@@ -1982,16 +1780,15 @@ def socket_send_group_message(data):
         return
 
     try:
-
-        group_id =
-            int(data.get("group_id"))
-
-    except:
-
+        group_id = int(
+            data.get("group_id")
+        )
+    except (TypeError, ValueError):
         return
 
-    message =
-        str(data.get("message", "")).strip()
+    message = str(
+        data.get("message", "")
+    ).strip()
 
     if not message:
         return
@@ -2000,12 +1797,10 @@ def socket_send_group_message(data):
     cur = None
 
     try:
-
         conn = get_db()
 
         cur = conn.cursor(
-            cursor_factory=
-            psycopg2.extras.RealDictCursor
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
 
         cur.execute("""
@@ -2019,7 +1814,6 @@ def socket_send_group_message(data):
         ))
 
         if not cur.fetchone():
-
             emit(
                 "message_error",
                 {
@@ -2027,7 +1821,6 @@ def socket_send_group_message(data):
                         "You are not a member of this group."
                 }
             )
-
             return
 
         cur.execute("""
@@ -2041,19 +1834,24 @@ def socket_send_group_message(data):
             message
         ))
 
-        result =
-            dict(cur.fetchone())
+        result = dict(
+            cur.fetchone()
+        )
 
         cur.execute(
             "SELECT name FROM users WHERE id=%s",
             (user_id,)
         )
 
-        result["sender_name"] =
-            cur.fetchone()["name"]
+        sender = cur.fetchone()
 
-        result["created_at"] =
-            str(result["created_at"])
+        result["sender_name"] = (
+            sender["name"] if sender else "User"
+        )
+
+        result["created_at"] = str(
+            result["created_at"]
+        )
 
         cur.execute("""
             SELECT user_id
@@ -2061,13 +1859,14 @@ def socket_send_group_message(data):
             WHERE group_id=%s
         """, (group_id,))
 
-        members =
-            [row["user_id"] for row in cur.fetchall()]
+        members = [
+            row["user_id"]
+            for row in cur.fetchall()
+        ]
 
         conn.commit()
 
         for member_id in members:
-
             socketio.emit(
                 "group_message",
                 result,
@@ -2075,7 +1874,6 @@ def socket_send_group_message(data):
             )
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -2093,7 +1891,6 @@ def socket_send_group_message(data):
         )
 
     finally:
-
         if cur:
             cur.close()
 
@@ -2107,9 +1904,7 @@ def socket_send_group_message(data):
 
 @socketio.on("typing")
 def socket_typing(data):
-
-    sender_id =
-        session.get("user_id")
+    sender_id = session.get("user_id")
 
     if not sender_id:
         return
@@ -2118,12 +1913,10 @@ def socket_typing(data):
         return
 
     try:
-
-        receiver_id =
-            int(data.get("receiver_id"))
-
-    except:
-
+        receiver_id = int(
+            data.get("receiver_id")
+        )
+    except (TypeError, ValueError):
         return
 
     if receiver_id == int(sender_id):
@@ -2133,8 +1926,9 @@ def socket_typing(data):
         "user_typing",
         {
             "user_id": int(sender_id),
-            "typing":
-                bool(data.get("typing", False))
+            "typing": bool(
+                data.get("typing", False)
+            )
         },
         room="user_" + str(receiver_id)
     )
@@ -2144,41 +1938,29 @@ def socket_typing(data):
 # UPLOAD CHAT FILE
 # =========================================================
 
-@app.route(
-    "/api/upload",
-    methods=["POST"]
-)
+@app.route("/api/upload", methods=["POST"])
 def upload_file():
-
-    sender_id =
-        session.get("user_id")
+    sender_id = session.get("user_id")
 
     if not sender_id:
-
         return jsonify({
             "success": False,
-            "message":
-                "Please login first."
+            "message": "Please login first."
         }), 401
 
-    receiver_id =
-        request.form.get("receiver_id")
+    receiver_id = request.form.get(
+        "receiver_id"
+    )
 
     try:
-
-        receiver_id =
-            int(receiver_id)
-
-    except:
-
+        receiver_id = int(receiver_id)
+    except (TypeError, ValueError):
         return jsonify({
             "success": False,
-            "message":
-                "Invalid receiver."
+            "message": "Invalid receiver."
         }), 400
 
     if receiver_id == int(sender_id):
-
         return jsonify({
             "success": False,
             "message":
@@ -2186,48 +1968,45 @@ def upload_file():
         }), 400
 
     if not user_exists(receiver_id):
-
         return jsonify({
             "success": False,
-            "message":
-                "Receiver not found."
+            "message": "Receiver not found."
         }), 404
 
     if "file" not in request.files:
-
         return jsonify({
             "success": False,
-            "message":
-                "No file selected."
+            "message": "No file selected."
         }), 400
 
-    file =
-        request.files["file"]
+    file = request.files["file"]
 
     if not file.filename:
-
         return jsonify({
             "success": False,
-            "message":
-                "No file selected."
+            "message": "No file selected."
         }), 400
 
     if not allowed_file(file.filename):
-
         return jsonify({
             "success": False,
-            "message":
-                "This file type is not allowed."
+            "message": "This file type is not allowed."
         }), 400
 
-    original_name =
-        secure_filename(file.filename)
+    original_name = secure_filename(
+        file.filename
+    )
 
-    extension =
-        original_name.rsplit(
-            ".",
-            1
-        )[1].lower()
+    if not original_name or "." not in original_name:
+        return jsonify({
+            "success": False,
+            "message": "Invalid file."
+        }), 400
+
+    extension = original_name.rsplit(
+        ".",
+        1
+    )[1].lower()
 
     unique_name = (
         str(sender_id)
@@ -2237,18 +2016,15 @@ def upload_file():
         + extension
     )
 
-    path =
-        os.path.join(
-            UPLOAD_FOLDER,
-            unique_name
-        )
+    path = os.path.join(
+        UPLOAD_FOLDER,
+        unique_name
+    )
 
     try:
-
         file.save(path)
 
     except Exception as e:
-
         print(
             "FILE SAVE ERROR:",
             repr(e)
@@ -2256,8 +2032,7 @@ def upload_file():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not save file."
+            "message": "Could not save file."
         }), 500
 
     if extension in {
@@ -2267,7 +2042,6 @@ def upload_file():
         "gif",
         "webp"
     }:
-
         message_type = "image"
 
     elif extension in {
@@ -2276,18 +2050,14 @@ def upload_file():
         "mov",
         "avi"
     }:
-
         message_type = "video"
 
     else:
-
         message_type = "file"
 
-    file_url =
-        "/uploads/" + unique_name
+    file_url = "/uploads/" + unique_name
 
     try:
-
         saved = save_message(
             sender_id,
             receiver_id,
@@ -2303,22 +2073,16 @@ def upload_file():
             room="user_" + str(receiver_id)
         )
 
-        # Do not emit to sender here because
-        # HTTP response already gives the message.
-
         return jsonify({
             "success": True,
             "message": saved
         })
 
     except Exception as e:
-
         try:
-
             if os.path.exists(path):
                 os.remove(path)
-
-        except:
+        except Exception:
             pass
 
         print(
@@ -2328,13 +2092,12 @@ def upload_file():
 
         return jsonify({
             "success": False,
-            "message":
-                "Could not save file message."
+            "message": "Could not save file message."
         }), 500
 
 
 # =========================================================
-# MARK READ
+# MARK READ - HTTP
 # =========================================================
 
 @app.route(
@@ -2342,12 +2105,9 @@ def upload_file():
     methods=["POST"]
 )
 def mark_read(contact_id):
-
-    user_id =
-        session.get("user_id")
+    user_id = session.get("user_id")
 
     if not user_id:
-
         return jsonify({
             "success": False
         }), 401
@@ -2356,7 +2116,6 @@ def mark_read(contact_id):
     cur = None
 
     try:
-
         conn = get_db()
         cur = conn.cursor()
 
@@ -2387,7 +2146,6 @@ def mark_read(contact_id):
         })
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -2401,7 +2159,6 @@ def mark_read(contact_id):
         }), 500
 
     finally:
-
         if cur:
             cur.close()
 
@@ -2415,9 +2172,7 @@ def mark_read(contact_id):
 
 @socketio.on("message_delivered_ack")
 def socket_message_delivered_ack(data):
-
-    receiver_id =
-        session.get("user_id")
+    receiver_id = session.get("user_id")
 
     if not receiver_id:
         return
@@ -2426,24 +2181,22 @@ def socket_message_delivered_ack(data):
         return
 
     try:
+        message_id = int(
+            data.get("message_id")
+        )
 
-        message_id =
-            int(data.get("message_id"))
+        sender_id = int(
+            data.get("sender_id")
+        )
 
-        sender_id =
-            int(data.get("sender_id"))
-
-    except:
-
+    except (TypeError, ValueError):
         return
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
-
         cur = conn.cursor()
 
         cur.execute("""
@@ -2472,14 +2225,12 @@ def socket_message_delivered_ack(data):
         )
 
     except Exception as e:
-
         print(
             "DELIVERY ACK ERROR:",
             repr(e)
         )
 
     finally:
-
         if cur:
             cur.close()
 
@@ -2493,9 +2244,7 @@ def socket_message_delivered_ack(data):
 
 @socketio.on("mark_read")
 def socket_mark_read(data):
-
-    user_id =
-        session.get("user_id")
+    user_id = session.get("user_id")
 
     if not user_id:
         return
@@ -2504,19 +2253,16 @@ def socket_mark_read(data):
         return
 
     try:
-
-        contact_id =
-            int(data.get("contact_id"))
-
-    except:
-
+        contact_id = int(
+            data.get("contact_id")
+        )
+    except (TypeError, ValueError):
         return
 
     conn = None
     cur = None
 
     try:
-
         conn = get_db()
         cur = conn.cursor()
 
@@ -2543,7 +2289,6 @@ def socket_mark_read(data):
         )
 
     except Exception as e:
-
         if conn:
             conn.rollback()
 
@@ -2553,7 +2298,6 @@ def socket_mark_read(data):
         )
 
     finally:
-
         if cur:
             cur.close()
 
@@ -2567,9 +2311,7 @@ def socket_mark_read(data):
 
 @app.route("/api/online-users")
 def online_users_api():
-
     if not session.get("user_id"):
-
         return jsonify({
             "success": False,
             "users": []
@@ -2587,9 +2329,7 @@ def online_users_api():
 
 @socketio.on("connect")
 def socket_connect():
-
-    user_id =
-        session.get("user_id")
+    user_id = session.get("user_id")
 
     print(
         "SOCKET CONNECT:",
@@ -2597,34 +2337,28 @@ def socket_connect():
     )
 
     if not user_id:
-
         print(
             "Socket rejected: not logged in"
         )
-
         return False
 
-    room =
-        "user_" + str(user_id)
+    room = "user_" + str(user_id)
 
     join_room(room)
 
-    became_online =
-        add_online_user(
-            user_id,
-            request.sid
-        )
+    became_online = add_online_user(
+        user_id,
+        request.sid
+    )
 
     emit(
         "online_users",
         {
-            "users":
-                get_online_user_ids()
+            "users": get_online_user_ids()
         }
     )
 
     if became_online:
-
         broadcast_presence(
             user_id,
             True
@@ -2637,9 +2371,7 @@ def socket_connect():
 
 @socketio.on("disconnect")
 def socket_disconnect(reason=None):
-
-    user_id =
-        session.get("user_id")
+    user_id = session.get("user_id")
 
     print(
         "SOCKET DISCONNECT:",
@@ -2648,15 +2380,12 @@ def socket_disconnect(reason=None):
     )
 
     if user_id:
-
-        became_offline =
-            remove_online_user(
-                user_id,
-                request.sid
-            )
+        became_offline = remove_online_user(
+            user_id,
+            request.sid
+        )
 
         if became_offline:
-
             broadcast_presence(
                 user_id,
                 False
@@ -2669,7 +2398,6 @@ def socket_disconnect(reason=None):
 
 @socketio.on_error_default
 def socket_error_handler(error):
-
     print(
         "SOCKET ERROR:",
         repr(error)
@@ -2681,7 +2409,6 @@ def socket_error_handler(error):
 # =========================================================
 
 if not DATABASE_URL:
-
     raise RuntimeError(
         "DATABASE_URL environment variable is missing. "
         "Add your Render PostgreSQL DATABASE_URL."
@@ -2696,7 +2423,6 @@ init_db()
 # =========================================================
 
 if __name__ == "__main__":
-
     socketio.run(
         app,
         host="0.0.0.0",
