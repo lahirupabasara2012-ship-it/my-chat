@@ -8,6 +8,8 @@ let currentUser = null;
 let contacts = [];
 let groups = [];
 
+let appStarting = false;
+
 let socket = null;
 
 let selectedContactId = null;
@@ -105,9 +107,19 @@ async function login() {
         return;
     }
 
+    const loginButton =
+        document.querySelector("#loginForm button");
+
+    if (loginButton) {
+        loginButton.disabled = true;
+        loginButton.textContent = "Logging in...";
+    }
+
     setAuthMessage("Logging in...", false);
 
     try {
+
+        console.log("LOGIN START");
 
         const data = await api("/api/login", {
             method: "POST",
@@ -115,26 +127,49 @@ async function login() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                email,
-                password
+                email: email,
+                password: password
             })
         });
 
-        if (!data.success) {
-            throw new Error(data.message || "Login failed.");
+        console.log("LOGIN RESPONSE:", data);
+
+        if (!data || !data.success) {
+            throw new Error(
+                data?.message || "Login failed."
+            );
+        }
+
+        if (!data.user) {
+            throw new Error(
+                "Login successful, but user data was not returned by server."
+            );
         }
 
         currentUser = data.user;
 
+        console.log("CURRENT USER:", currentUser);
+
         await startChatApp();
+
+        console.log("CHAT APP STARTED");
 
     } catch (error) {
 
-        console.error("LOGIN:", error);
-        setAuthMessage(error.message);
+        console.error("LOGIN ERROR:", error);
+
+        setAuthMessage(
+            error?.message || "Login failed."
+        );
+
+    } finally {
+
+        if (loginButton) {
+            loginButton.disabled = false;
+            loginButton.textContent = "➔ Login";
+        }
     }
 }
-
 
 async function signup() {
 
@@ -227,17 +262,97 @@ async function loadCurrentUser() {
 
 async function startChatApp() {
 
-    document.getElementById("authPage").style.display = "none";
-    document.getElementById("chatApp").style.display = "flex";
+    if (appStarting) {
+        console.log("APP START ALREADY RUNNING");
+        return;
+    }
 
-    updateProfileUI();
+    if (!currentUser) {
+        console.error("Cannot start app: currentUser is missing.");
+        return;
+    }
 
-    await loadContacts();
-    await loadGroups();
+    appStarting = true;
 
-    connectSocket();
+    console.log("Starting MyChat app...");
+
+    try {
+
+        const authPage =
+            document.getElementById("authPage");
+
+        const chatApp =
+            document.getElementById("chatApp");
+
+        if (!authPage || !chatApp) {
+            throw new Error(
+                "Chat page elements not found."
+            );
+        }
+
+        // Show chat app
+        authPage.style.display = "none";
+        chatApp.style.display = "flex";
+
+        updateProfileUI();
+
+        // Load contacts
+        try {
+            await loadContacts();
+        } catch (error) {
+            console.error(
+                "LOAD CONTACTS DURING START:",
+                error
+            );
+        }
+
+        // Load groups
+        try {
+            await loadGroups();
+        } catch (error) {
+            console.error(
+                "LOAD GROUPS DURING START:",
+                error
+            );
+        }
+
+        // Connect socket
+        connectSocket();
+
+        console.log("MyChat app ready.");
+
+    } catch (error) {
+
+        console.error(
+            "START CHAT APP ERROR:",
+            error
+        );
+
+        // If startup failed, show login page again
+        const authPage =
+            document.getElementById("authPage");
+
+        const chatApp =
+            document.getElementById("chatApp");
+
+        if (authPage) {
+            authPage.style.display = "flex";
+        }
+
+        if (chatApp) {
+            chatApp.style.display = "none";
+        }
+
+        setAuthMessage(
+            error?.message ||
+            "Could not start MyChat."
+        );
+
+    } finally {
+
+        appStarting = false;
+    }
 }
-
 
 // =========================================================
 // PROFILE UI
@@ -1955,11 +2070,27 @@ document.addEventListener(
         // Check login
         // ---------------------------------------------
 
-        const loggedIn =
-            await loadCurrentUser();
+        try {
 
-        if (loggedIn) {
-            await startChatApp();
+            const loggedIn =
+                await loadCurrentUser();
+
+            console.log(
+                "Existing session:",
+                loggedIn
+            );
+
+            if (loggedIn && currentUser) {
+                await startChatApp();
+            }
+
+        } catch (error) {
+
+            console.error(
+                "SESSION CHECK ERROR:",
+                error
+            );
+
         }
 
 
