@@ -1,4 +1,3 @@
-```python
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_socketio import SocketIO, emit, join_room
 import psycopg2
@@ -2710,4 +2709,3 @@ if __name__ == "__main__":
         debug=False,
         allow_unsafe_werkzeug=True
     )
-```
