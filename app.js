@@ -1,18 +1,30 @@
+```javascript
 // =========================================================
 // MYCHAT - APP.JS
-// Contacts + Profile Photo + New Group
+// Complete frontend
 // =========================================================
 
 let currentUser = null;
 let contacts = [];
+let groups = [];
+
+let socket = null;
+
+let selectedContactId = null;
+let selectedGroupId = null;
+
 let selectedGroupMembers = new Set();
+
+let typingTimer = null;
+let isTyping = false;
 
 
 // =========================================================
-// API HELPER
+// API
 // =========================================================
 
 async function api(url, options = {}) {
+
     const response = await fetch(url, {
         credentials: "same-origin",
         ...options
@@ -22,9 +34,7 @@ async function api(url, options = {}) {
 
     try {
         data = await response.json();
-    } catch (e) {
-        data = {};
-    }
+    } catch (e) {}
 
     if (!response.ok) {
         throw new Error(
@@ -37,11 +47,159 @@ async function api(url, options = {}) {
 
 
 // =========================================================
+// ESCAPE HTML
+// =========================================================
+
+function escapeHtml(value) {
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+// =========================================================
+// AUTH
+// =========================================================
+
+function showSignup() {
+
+    document.getElementById("loginForm").style.display = "none";
+    document.getElementById("signupForm").style.display = "block";
+    setAuthMessage("");
+}
+
+
+function showLogin() {
+
+    document.getElementById("signupForm").style.display = "none";
+    document.getElementById("loginForm").style.display = "block";
+    setAuthMessage("");
+}
+
+
+function setAuthMessage(message, error = true) {
+
+    const element = document.getElementById("authMessage");
+
+    if (!element) return;
+
+    element.textContent = message || "";
+    element.style.color = error ? "" : "#35c759";
+}
+
+
+async function login() {
+
+    const email =
+        document.getElementById("loginEmail").value.trim();
+
+    const password =
+        document.getElementById("loginPassword").value;
+
+    if (!email || !password) {
+        setAuthMessage("Enter email and password.");
+        return;
+    }
+
+    setAuthMessage("Logging in...", false);
+
+    try {
+
+        const data = await api("/api/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                email,
+                password
+            })
+        });
+
+        if (!data.success) {
+            throw new Error(data.message || "Login failed.");
+        }
+
+        currentUser = data.user;
+
+        await startChatApp();
+
+    } catch (error) {
+
+        console.error("LOGIN:", error);
+        setAuthMessage(error.message);
+    }
+}
+
+
+async function signup() {
+
+    const name =
+        document.getElementById("signupName").value.trim();
+
+    const email =
+        document.getElementById("signupEmail").value.trim();
+
+    const password =
+        document.getElementById("signupPassword").value;
+
+    if (!name || !email || !password) {
+        setAuthMessage("All fields are required.");
+        return;
+    }
+
+    if (password.length < 6) {
+        setAuthMessage("Password must be at least 6 characters.");
+        return;
+    }
+
+    setAuthMessage("Creating account...", false);
+
+    try {
+
+        const data = await api("/api/signup", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                name,
+                email,
+                password
+            })
+        });
+
+        if (!data.success) {
+            throw new Error(data.message || "Signup failed.");
+        }
+
+        showLogin();
+
+        document.getElementById("loginEmail").value = email;
+        document.getElementById("loginPassword").value = password;
+
+        setAuthMessage("Account created. Please login.", false);
+
+    } catch (error) {
+
+        console.error("SIGNUP:", error);
+        setAuthMessage(error.message);
+    }
+}
+
+
+// =========================================================
 // CURRENT USER
 // =========================================================
 
 async function loadCurrentUser() {
+
     try {
+
         const data = await api("/api/me");
 
         if (!data.logged_in) {
@@ -56,9 +214,28 @@ async function loadCurrentUser() {
         return true;
 
     } catch (error) {
-        console.error("loadCurrentUser:", error);
+
+        console.error("CURRENT USER:", error);
         return false;
     }
+}
+
+
+// =========================================================
+// START APP
+// =========================================================
+
+async function startChatApp() {
+
+    document.getElementById("authPage").style.display = "none";
+    document.getElementById("chatApp").style.display = "flex";
+
+    updateProfileUI();
+
+    await loadContacts();
+    await loadGroups();
+
+    connectSocket();
 }
 
 
@@ -68,43 +245,37 @@ async function loadCurrentUser() {
 
 function updateProfileUI() {
 
-    if (!currentUser) {
-        return;
+    if (!currentUser) return;
+
+    const name =
+        currentUser.name || "User";
+
+    const currentName =
+        document.getElementById("currentUserName");
+
+    if (currentName) {
+        currentName.textContent = name;
     }
 
-    const nameElements = document.querySelectorAll(
-        "[data-current-user-name]"
-    );
+    const profileName =
+        document.getElementById("profileNameInput");
 
-    nameElements.forEach(element => {
-        element.textContent =
-            currentUser.name || "User";
-    });
+    if (profileName) {
+        profileName.value = name;
+    }
 
-    const emailElements = document.querySelectorAll(
-        "[data-current-user-email]"
-    );
+    const profileEmail =
+        document.getElementById("profileEmailInput");
 
-    emailElements.forEach(element => {
-        element.textContent =
+    if (profileEmail) {
+        profileEmail.value =
             currentUser.email || "";
-    });
-
-    updateAvatarElements();
-}
-
-
-function updateAvatarElements() {
-
-    if (!currentUser) {
-        return;
     }
 
-    const avatars = document.querySelectorAll(
-        "[data-current-user-avatar]"
-    );
+    const avatar =
+        document.getElementById("profileAvatar");
 
-    avatars.forEach(avatar => {
+    if (avatar) {
 
         if (currentUser.avatar_url) {
 
@@ -118,11 +289,52 @@ function updateAvatarElements() {
         } else {
 
             avatar.textContent =
-                (currentUser.name || "U")
-                .charAt(0)
-                .toUpperCase();
+                name.charAt(0).toUpperCase();
         }
-    });
+    }
+
+    updateChatAvatar();
+}
+
+
+function updateChatAvatar() {
+
+    if (!selectedContactId) return;
+
+    const contact =
+        contacts.find(
+            c => Number(c.id) === Number(selectedContactId)
+        );
+
+    if (!contact) return;
+
+    setAvatar(
+        document.getElementById("chatAvatar"),
+        contact
+    );
+}
+
+
+function setAvatar(element, user) {
+
+    if (!element || !user) return;
+
+    if (user.avatar_url) {
+
+        element.innerHTML = `
+            <img
+                src="${escapeHtml(user.avatar_url)}"
+                alt=""
+            >
+        `;
+
+    } else {
+
+        element.textContent =
+            (user.name || "U")
+            .charAt(0)
+            .toUpperCase();
+    }
 }
 
 
@@ -143,18 +355,21 @@ async function loadContacts() {
 
         renderContacts();
 
+        if (selectedContactId) {
+            updateChatAvatar();
+        }
+
     } catch (error) {
 
-        console.error("loadContacts:", error);
+        console.error("CONTACTS:", error);
 
         const container =
-            document.getElementById("contactsList");
+            document.getElementById("contacts");
 
         if (container) {
-
             container.innerHTML = `
                 <div class="empty-state">
-                    Unable to load contacts
+                    Unable to load contacts.
                 </div>
             `;
         }
@@ -165,11 +380,9 @@ async function loadContacts() {
 function renderContacts() {
 
     const container =
-        document.getElementById("contactsList");
+        document.getElementById("contacts");
 
-    if (!container) {
-        return;
-    }
+    if (!container) return;
 
     if (!contacts.length) {
 
@@ -205,9 +418,17 @@ function renderContacts() {
                         </span>
                     `;
 
+            const active =
+                Number(selectedContactId) === Number(contact.id)
+                    ? " active"
+                    : "";
+
+            const unread =
+                Number(contact.unread || 0);
+
             return `
                 <div
-                    class="contact-item"
+                    class="contact-item${active}"
                     data-contact-id="${contact.id}"
                     onclick="openPrivateChat(${contact.id})"
                 >
@@ -220,13 +441,25 @@ function renderContacts() {
 
                         <div class="contact-name">
                             ${escapeHtml(contact.name || "Unknown")}
+
+                            ${
+                                unread > 0
+                                ? `<span class="unread-badge">${unread}</span>`
+                                : ""
+                            }
                         </div>
 
                         <div class="contact-email">
-                            ${escapeHtml(contact.email || "")}
+                            ${escapeHtml(contact.last_message || contact.email || "")}
                         </div>
 
                     </div>
+
+                    ${
+                        contact.online
+                        ? `<span class="online-dot"></span>`
+                        : ""
+                    }
 
                 </div>
             `;
@@ -239,30 +472,945 @@ function renderContacts() {
 // OPEN PRIVATE CHAT
 // =========================================================
 
-function openPrivateChat(userId) {
+async function openPrivateChat(userId) {
 
     const contact =
         contacts.find(
-            contact =>
-                Number(contact.id) === Number(userId)
+            c => Number(c.id) === Number(userId)
         );
 
-    if (!contact) {
+    if (!contact) return;
+
+    selectedContactId = Number(userId);
+    selectedGroupId = null;
+
+    renderContacts();
+    renderGroups();
+
+    document.getElementById("chatName").textContent =
+        contact.name || "User";
+
+    document.getElementById("chatStatus").textContent =
+        contact.online ? "Online" : "Offline";
+
+    setAvatar(
+        document.getElementById("chatAvatar"),
+        contact
+    );
+
+    enableMessageInput(true);
+
+    await loadMessages(selectedContactId);
+
+    markRead(selectedContactId);
+}
+
+
+// =========================================================
+// LOAD PRIVATE MESSAGES
+// =========================================================
+
+async function loadMessages(contactId) {
+
+    const container =
+        document.getElementById("messages");
+
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="empty-chat">
+            Loading messages...
+        </div>
+    `;
+
+    try {
+
+        const data =
+            await api(`/api/messages/${contactId}`);
+
+        const messages =
+            Array.isArray(data.messages)
+                ? data.messages
+                : [];
+
+        renderPrivateMessages(messages);
+
+    } catch (error) {
+
+        console.error("LOAD MESSAGES:", error);
+
+        container.innerHTML = `
+            <div class="empty-chat">
+                Unable to load messages.
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// MESSAGE RENDER
+// =========================================================
+
+function renderPrivateMessages(messages) {
+
+    const container =
+        document.getElementById("messages");
+
+    if (!messages.length) {
+
+        container.innerHTML = `
+            <div class="empty-chat">
+                No messages yet. Say hello 👋
+            </div>
+        `;
+
         return;
     }
 
-    console.log("Opening chat with:", contact);
+    container.innerHTML =
+        messages.map(renderMessage).join("");
 
-    /*
-       ඔයාගේ existing chat function එක තිබ්බොත්
-       මෙතනින් ඒක call කරන්න.
+    scrollMessagesToBottom();
+}
 
-       උදා:
-       selectContact(userId);
-    */
 
-    if (typeof selectContact === "function") {
-        selectContact(userId);
+function renderMessage(message) {
+
+    const mine =
+        Number(message.sender_id) === Number(currentUser.id);
+
+    const time =
+        formatTime(message.created_at);
+
+    let content = "";
+
+    if (message.message_type === "image") {
+
+        content = `
+            <a
+                href="${escapeHtml(message.file_url)}"
+                target="_blank"
+                rel="noopener"
+            >
+                <img
+                    class="chat-image"
+                    src="${escapeHtml(message.file_url)}"
+                    alt="${escapeHtml(message.file_name || "Image")}"
+                >
+            </a>
+        `;
+
+    } else if (message.message_type === "video") {
+
+        content = `
+            <video
+                class="chat-video"
+                controls
+                src="${escapeHtml(message.file_url)}"
+            ></video>
+        `;
+
+    } else if (message.message_type === "file") {
+
+        content = `
+            <a
+                class="chat-file"
+                href="${escapeHtml(message.file_url)}"
+                target="_blank"
+                rel="noopener"
+            >
+                📎 ${escapeHtml(message.file_name || "File")}
+            </a>
+        `;
+
+    } else {
+
+        content =
+            escapeHtml(message.message)
+            .replace(/\n/g, "<br>");
+    }
+
+    let status = "";
+
+    if (mine) {
+
+        if (Number(message.is_read) === 1) {
+            status = `<span class="message-status seen">✓✓</span>`;
+        } else {
+            status = `<span class="message-status">✓</span>`;
+        }
+    }
+
+    return `
+        <div
+            class="message-row ${mine ? "mine" : "theirs"}"
+            data-message-id="${message.id}"
+        >
+
+            <div class="message-bubble">
+
+                <div class="message-content">
+                    ${content}
+                </div>
+
+                <div class="message-meta">
+                    <span>${escapeHtml(time)}</span>
+                    ${status}
+                </div>
+
+            </div>
+
+        </div>
+    `;
+}
+
+
+function appendMessage(message) {
+
+    if (!selectedContactId) return;
+
+    const sender =
+        Number(message.sender_id);
+
+    const receiver =
+        Number(message.receiver_id);
+
+    const myId =
+        Number(currentUser.id);
+
+    if (
+        sender !== myId &&
+        receiver !== myId
+    ) {
+        return;
+    }
+
+    if (
+        sender !== Number(selectedContactId) &&
+        receiver !== Number(selectedContactId)
+    ) {
+        return;
+    }
+
+    const container =
+        document.getElementById("messages");
+
+    const empty =
+        container.querySelector(".empty-chat");
+
+    if (empty) {
+        container.innerHTML = "";
+    }
+
+    if (
+        container.querySelector(
+            `[data-message-id="${message.id}"]`
+        )
+    ) {
+        return;
+    }
+
+    container.insertAdjacentHTML(
+        "beforeend",
+        renderMessage(message)
+    );
+
+    scrollMessagesToBottom();
+}
+
+
+// =========================================================
+// GROUPS
+// =========================================================
+
+async function loadGroups() {
+
+    try {
+
+        const data =
+            await api("/api/groups");
+
+        groups =
+            Array.isArray(data.groups)
+                ? data.groups
+                : [];
+
+        renderGroups();
+
+    } catch (error) {
+
+        console.error("GROUPS:", error);
+    }
+}
+
+
+function renderGroups() {
+
+    const container =
+        document.getElementById("groups");
+
+    if (!container) return;
+
+    if (!groups.length) {
+        container.innerHTML = "";
+        return;
+    }
+
+    container.innerHTML =
+        groups.map(group => {
+
+            const active =
+                Number(selectedGroupId) === Number(group.id)
+                    ? " active"
+                    : "";
+
+            return `
+                <div
+                    class="contact-item group-item${active}"
+                    onclick="openGroupChat(${group.id})"
+                >
+
+                    <div class="contact-avatar">
+                        👥
+                    </div>
+
+                    <div class="contact-info">
+
+                        <div class="contact-name">
+                            ${escapeHtml(group.name)}
+                        </div>
+
+                        <div class="contact-email">
+                            ${Number(group.member_count || 0)} members
+                        </div>
+
+                    </div>
+
+                </div>
+            `;
+
+        }).join("");
+}
+
+
+async function openGroupChat(groupId) {
+
+    const group =
+        groups.find(
+            g => Number(g.id) === Number(groupId)
+        );
+
+    if (!group) return;
+
+    selectedGroupId = Number(groupId);
+    selectedContactId = null;
+
+    renderGroups();
+    renderContacts();
+
+    document.getElementById("chatName").textContent =
+        group.name;
+
+    document.getElementById("chatStatus").textContent =
+        `${group.member_count || 0} members`;
+
+    document.getElementById("chatAvatar").textContent =
+        "👥";
+
+    enableMessageInput(true);
+
+    await loadGroupMessages(groupId);
+}
+
+
+async function loadGroupMessages(groupId) {
+
+    const container =
+        document.getElementById("messages");
+
+    container.innerHTML = `
+        <div class="empty-chat">
+            Loading group messages...
+        </div>
+    `;
+
+    try {
+
+        const data =
+            await api(`/api/groups/${groupId}/messages`);
+
+        const messages =
+            Array.isArray(data.messages)
+                ? data.messages
+                : [];
+
+        if (!messages.length) {
+
+            container.innerHTML = `
+                <div class="empty-chat">
+                    No group messages yet.
+                </div>
+            `;
+
+            return;
+        }
+
+        container.innerHTML =
+            messages.map(message => {
+
+                const mine =
+                    Number(message.sender_id) === Number(currentUser.id);
+
+                return `
+                    <div class="message-row ${mine ? "mine" : "theirs"}">
+
+                        <div class="message-bubble">
+
+                            ${
+                                !mine
+                                ? `<div class="group-sender">${escapeHtml(message.sender_name)}</div>`
+                                : ""
+                            }
+
+                            <div class="message-content">
+                                ${escapeHtml(message.message).replace(/\n/g, "<br>")}
+                            </div>
+
+                            <div class="message-meta">
+                                ${escapeHtml(formatTime(message.created_at))}
+                            </div>
+
+                        </div>
+
+                    </div>
+                `;
+
+            }).join("");
+
+        scrollMessagesToBottom();
+
+    } catch (error) {
+
+        console.error("GROUP MESSAGES:", error);
+
+        container.innerHTML = `
+            <div class="empty-chat">
+                Unable to load group messages.
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// SEND MESSAGE
+// =========================================================
+
+function sendCurrentMessage() {
+
+    const input =
+        document.getElementById("messageInput");
+
+    const message =
+        input.value.trim();
+
+    if (!message) return;
+
+    if (!socket || !socket.connected) {
+
+        showNotification(
+            "Connecting to chat server..."
+        );
+
+        return;
+    }
+
+    if (selectedGroupId) {
+
+        socket.emit(
+            "send_group_message",
+            {
+                group_id: selectedGroupId,
+                message
+            }
+        );
+
+    } else if (selectedContactId) {
+
+        socket.emit(
+            "send_message",
+            {
+                receiver_id: selectedContactId,
+                message
+            }
+        );
+
+    } else {
+
+        return;
+    }
+
+    input.value = "";
+
+    stopTyping();
+}
+
+
+function enableMessageInput(enabled) {
+
+    document.getElementById("messageInput").disabled =
+        !enabled;
+
+    document.getElementById("sendBtn").disabled =
+        !enabled;
+
+    document.getElementById("fileBtn").disabled =
+        !enabled;
+
+    if (enabled) {
+        document.getElementById("messageInput").focus();
+    }
+}
+
+
+// =========================================================
+// SOCKET.IO
+// =========================================================
+
+function connectSocket() {
+
+    if (socket) {
+
+        try {
+            socket.disconnect();
+        } catch (e) {}
+    }
+
+    socket = io({
+        transports: ["polling", "websocket"],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000
+    });
+
+
+    socket.on("connect", () => {
+
+        console.log(
+            "Socket connected:",
+            socket.id
+        );
+    });
+
+
+    socket.on("disconnect", reason => {
+
+        console.log(
+            "Socket disconnected:",
+            reason
+        );
+    });
+
+
+    socket.on("connect_error", error => {
+
+        console.error(
+            "Socket connection error:",
+            error
+        );
+    });
+
+
+    socket.on("online_users", data => {
+
+        const ids =
+            Array.isArray(data?.users)
+                ? data.users
+                : [];
+
+        contacts.forEach(contact => {
+
+            contact.online =
+                ids.includes(Number(contact.id));
+        });
+
+        renderContacts();
+        updateChatStatus();
+
+    });
+
+
+    socket.on("user_status", data => {
+
+        if (!data) return;
+
+        const userId =
+            Number(data.user_id);
+
+        const contact =
+            contacts.find(
+                c => Number(c.id) === userId
+            );
+
+        if (contact) {
+
+            contact.online =
+                Boolean(data.online);
+
+            renderContacts();
+        }
+
+        if (
+            selectedContactId === userId
+        ) {
+            updateChatStatus();
+        }
+    });
+
+
+    socket.on("new_message", message => {
+
+        if (!message) return;
+
+        appendMessage(message);
+
+        const senderId =
+            Number(message.sender_id);
+
+        const myId =
+            Number(currentUser.id);
+
+        if (
+            senderId !== myId
+            &&
+            selectedContactId === senderId
+        ) {
+
+            socket.emit(
+                "message_delivered_ack",
+                {
+                    message_id: message.id,
+                    sender_id: senderId
+                }
+            );
+
+            markRead(senderId);
+        }
+
+        if (senderId !== myId) {
+            loadContacts();
+        }
+    });
+
+
+    socket.on("message_sent", message => {
+
+        if (!message) return;
+
+        appendMessage(message);
+    });
+
+
+    socket.on("message_delivered", data => {
+
+        if (!data) return;
+
+        const element =
+            document.querySelector(
+                `[data-message-id="${data.message_id}"]`
+            );
+
+        if (!element) return;
+
+        const status =
+            element.querySelector(".message-status");
+
+        if (status) {
+            status.textContent = "✓✓";
+        }
+    });
+
+
+    socket.on("messages_read", data => {
+
+        if (!data) return;
+
+        const contactId =
+            Number(data.contact_id);
+
+        if (
+            selectedContactId !== contactId
+        ) {
+            return;
+        }
+
+        document
+            .querySelectorAll(".message-status")
+            .forEach(status => {
+
+                status.textContent = "✓✓";
+                status.classList.add("seen");
+
+            });
+
+        loadContacts();
+    });
+
+
+    socket.on("user_typing", data => {
+
+        if (!data) return;
+
+        if (
+            Number(data.user_id) !==
+            Number(selectedContactId)
+        ) {
+            return;
+        }
+
+        const indicator =
+            document.getElementById("typingIndicator");
+
+        const text =
+            document.getElementById("typingText");
+
+        if (data.typing) {
+
+            text.textContent = "Typing...";
+            indicator.style.display = "flex";
+
+        } else {
+
+            indicator.style.display = "none";
+        }
+    });
+
+
+    socket.on("group_message", message => {
+
+        if (!message) return;
+
+        if (
+            selectedGroupId !==
+            Number(message.group_id)
+        ) {
+            loadGroups();
+            return;
+        }
+
+        const container =
+            document.getElementById("messages");
+
+        const empty =
+            container.querySelector(".empty-chat");
+
+        if (empty) {
+            container.innerHTML = "";
+        }
+
+        const mine =
+            Number(message.sender_id) ===
+            Number(currentUser.id);
+
+        container.insertAdjacentHTML(
+            "beforeend",
+            `
+            <div class="message-row ${mine ? "mine" : "theirs"}">
+
+                <div class="message-bubble">
+
+                    ${
+                        !mine
+                        ? `<div class="group-sender">${escapeHtml(message.sender_name)}</div>`
+                        : ""
+                    }
+
+                    <div class="message-content">
+                        ${escapeHtml(message.message).replace(/\n/g, "<br>")}
+                    </div>
+
+                    <div class="message-meta">
+                        ${escapeHtml(formatTime(message.created_at))}
+                    </div>
+
+                </div>
+
+            </div>
+            `
+        );
+
+        scrollMessagesToBottom();
+        loadGroups();
+    });
+
+
+    socket.on("message_error", data => {
+
+        showNotification(
+            data?.message || "Message could not be sent."
+        );
+    });
+}
+
+
+// =========================================================
+// TYPING
+// =========================================================
+
+function handleTyping() {
+
+    if (
+        !socket ||
+        !socket.connected ||
+        !selectedContactId
+    ) {
+        return;
+    }
+
+    if (!isTyping) {
+
+        isTyping = true;
+
+        socket.emit(
+            "typing",
+            {
+                receiver_id: selectedContactId,
+                typing: true
+            }
+        );
+    }
+
+    clearTimeout(typingTimer);
+
+    typingTimer = setTimeout(
+        stopTyping,
+        1200
+    );
+}
+
+
+function stopTyping() {
+
+    clearTimeout(typingTimer);
+
+    if (
+        isTyping &&
+        socket &&
+        socket.connected &&
+        selectedContactId
+    ) {
+
+        socket.emit(
+            "typing",
+            {
+                receiver_id: selectedContactId,
+                typing: false
+            }
+        );
+    }
+
+    isTyping = false;
+}
+
+
+// =========================================================
+// READ
+// =========================================================
+
+async function markRead(contactId) {
+
+    try {
+
+        await api(
+            `/api/messages/${contactId}/read`,
+            {
+                method: "POST"
+            }
+        );
+
+        if (socket && socket.connected) {
+
+            socket.emit(
+                "mark_read",
+                {
+                    contact_id: contactId
+                }
+            );
+        }
+
+        loadContacts();
+
+    } catch (error) {
+
+        console.error("MARK READ:", error);
+    }
+}
+
+
+// =========================================================
+// FILE UPLOAD
+// =========================================================
+
+async function uploadChatFile(file) {
+
+    if (!file || !selectedContactId) {
+        return;
+    }
+
+    const formData =
+        new FormData();
+
+    formData.append(
+        "file",
+        file
+    );
+
+    formData.append(
+        "receiver_id",
+        selectedContactId
+    );
+
+    showNotification("Uploading file...");
+
+    try {
+
+        const data =
+            await fetch(
+                "/api/upload",
+                {
+                    method: "POST",
+                    credentials: "same-origin",
+                    body: formData
+                }
+            ).then(async response => {
+
+                const result =
+                    await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        result.message ||
+                        "Upload failed."
+                    );
+                }
+
+                return result;
+            });
+
+        if (data.success && data.message) {
+
+            appendMessage(data.message);
+            showNotification("File sent.");
+        }
+
+    } catch (error) {
+
+        console.error("FILE UPLOAD:", error);
+
+        showNotification(
+            error.message || "File upload failed."
+        );
     }
 }
 
@@ -273,9 +1421,8 @@ function openPrivateChat(userId) {
 
 async function addContact(email) {
 
-    try {
-
-        const data = await api(
+    const data =
+        await api(
             "/api/add-contact",
             {
                 method: "POST",
@@ -288,83 +1435,46 @@ async function addContact(email) {
             }
         );
 
-        if (!data.success) {
-            throw new Error(
-                data.message || "Could not add contact"
-            );
-        }
+    await loadContacts();
 
-        await loadContacts();
-
-        return true;
-
-    } catch (error) {
-
-        console.error("addContact:", error);
-
-        alert(error.message);
-
-        return false;
-    }
+    return data;
 }
 
 
 // =========================================================
-// NEW GROUP MODAL
+// GROUP MODAL
 // =========================================================
 
 function openNewGroupModal() {
 
     selectedGroupMembers.clear();
 
-    const modal =
-        document.getElementById("newGroupModal");
-
-    if (!modal) {
-        console.error(
-            "newGroupModal was not found in index.html"
-        );
-
-        return;
-    }
+    document.getElementById("groupNameInput").value = "";
+    document.getElementById("groupMessage").textContent = "";
 
     renderGroupContacts();
-
     updateSelectedGroupCount();
 
-    modal.classList.add("show");
+    document
+        .getElementById("groupModal")
+        .classList.add("show");
 }
 
 
 function closeNewGroupModal() {
 
-    const modal =
-        document.getElementById("newGroupModal");
-
-    if (!modal) {
-        return;
-    }
-
-    modal.classList.remove("show");
+    document
+        .getElementById("groupModal")
+        .classList.remove("show");
 
     selectedGroupMembers.clear();
 }
 
 
-// =========================================================
-// GROUP CONTACT PICKER
-// =========================================================
-
 function renderGroupContacts() {
 
     const container =
-        document.getElementById(
-            "groupContactsList"
-        );
-
-    if (!container) {
-        return;
-    }
+        document.getElementById("groupContactPicker");
 
     if (!contacts.length) {
 
@@ -387,34 +1497,22 @@ function renderGroupContacts() {
 
             const avatar =
                 contact.avatar_url
-                    ? `
-                        <img
-                            src="${escapeHtml(contact.avatar_url)}"
-                            alt=""
-                        >
-                    `
-                    : `
-                        <span>
-                            ${escapeHtml(
-                                (contact.name || "U")
-                                .charAt(0)
-                                .toUpperCase()
-                            )}
-                        </span>
-                    `;
+                    ? `<img src="${escapeHtml(contact.avatar_url)}" alt="">`
+                    : `<span>${escapeHtml(
+                        (contact.name || "U")
+                        .charAt(0)
+                        .toUpperCase()
+                    )}</span>`;
 
             return `
-                <label
-                    class="group-contact-item"
-                >
+                <label class="group-contact-item">
 
                     <input
                         type="checkbox"
-                        value="${contact.id}"
                         ${checked ? "checked" : ""}
                         onchange="
                             toggleGroupMember(
-                                ${contact.id},
+                                ${Number(contact.id)},
                                 this.checked
                             )
                         "
@@ -427,15 +1525,11 @@ function renderGroupContacts() {
                     <div class="contact-info">
 
                         <div class="contact-name">
-                            ${escapeHtml(
-                                contact.name || "Unknown"
-                            )}
+                            ${escapeHtml(contact.name)}
                         </div>
 
                         <div class="contact-email">
-                            ${escapeHtml(
-                                contact.email || ""
-                            )}
+                            ${escapeHtml(contact.email)}
                         </div>
 
                     </div>
@@ -447,14 +1541,7 @@ function renderGroupContacts() {
 }
 
 
-// =========================================================
-// SELECT GROUP MEMBER
-// =========================================================
-
-function toggleGroupMember(
-    userId,
-    checked
-) {
+function toggleGroupMember(userId, checked) {
 
     userId = Number(userId);
 
@@ -471,13 +1558,7 @@ function toggleGroupMember(
 function updateSelectedGroupCount() {
 
     const element =
-        document.getElementById(
-            "selectedGroupCount"
-        );
-
-    if (!element) {
-        return;
-    }
+        document.getElementById("groupSelectedCount");
 
     const count =
         selectedGroupMembers.size;
@@ -487,180 +1568,175 @@ function updateSelectedGroupCount() {
 }
 
 
-// =========================================================
-// CREATE GROUP
-// =========================================================
-
 async function createGroup() {
 
-    const nameInput =
-        document.getElementById(
-            "groupNameInput"
-        );
+    const name =
+        document.getElementById("groupNameInput")
+        .value
+        .trim();
 
-    if (!nameInput) {
-        return;
-    }
+    if (!name) {
 
-    const groupName =
-        nameInput.value.trim();
-
-    if (!groupName) {
-
-        alert(
-            "Please enter a group name."
-        );
-
-        nameInput.focus();
+        document.getElementById("groupMessage")
+            .textContent =
+            "Enter a group name.";
 
         return;
     }
 
-    if (selectedGroupMembers.size === 0) {
+    if (!selectedGroupMembers.size) {
 
-        alert(
-            "Please select at least one contact."
-        );
+        document.getElementById("groupMessage")
+            .textContent =
+            "Select at least one contact.";
 
         return;
     }
 
     try {
 
-        const data = await api(
-            "/api/groups",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-                body: JSON.stringify({
-
-                    name: groupName,
-
-                    member_ids:
-                        Array.from(
-                            selectedGroupMembers
-                        )
-
-                })
-            }
-        );
+        const data =
+            await api(
+                "/api/groups",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        name,
+                        member_ids:
+                            Array.from(
+                                selectedGroupMembers
+                            )
+                    })
+                }
+            );
 
         if (!data.success) {
-
             throw new Error(
                 data.message ||
                 "Could not create group."
             );
         }
 
-        alert(
-            "Group created successfully!"
-        );
-
-        nameInput.value = "";
-
         closeNewGroupModal();
 
-        if (
-            typeof loadGroups ===
-            "function"
-        ) {
-            await loadGroups();
-        }
+        await loadGroups();
+
+        showNotification(
+            "Group created successfully."
+        );
 
     } catch (error) {
 
-        console.error(
-            "createGroup:",
-            error
-        );
+        console.error("CREATE GROUP:", error);
 
-        alert(error.message);
+        document.getElementById("groupMessage")
+            .textContent =
+            error.message;
     }
 }
 
 
 // =========================================================
-// PROFILE MODAL
+// PROFILE
 // =========================================================
 
 function openProfileModal() {
 
-    const modal =
-        document.getElementById(
-            "profileModal"
-        );
-
-    if (!modal) {
-        console.error(
-            "profileModal was not found."
-        );
-
-        return;
-    }
-
     updateProfileUI();
 
-    modal.classList.add("show");
+    document
+        .getElementById("profileModal")
+        .classList.add("show");
 }
 
 
 function closeProfileModal() {
 
-    const modal =
-        document.getElementById(
-            "profileModal"
-        );
-
-    if (!modal) {
-        return;
-    }
-
-    modal.classList.remove("show");
+    document
+        .getElementById("profileModal")
+        .classList.remove("show");
 }
 
 
-// =========================================================
-// PROFILE PHOTO
-// =========================================================
+async function saveProfile() {
 
-async function uploadProfilePhoto(
-    file
-) {
+    const name =
+        document.getElementById("profileNameInput")
+        .value
+        .trim();
 
-    if (!file) {
+    if (!name) {
+
+        document.getElementById("profileMessage")
+            .textContent =
+            "Name is required.";
+
         return;
     }
 
-    const allowedTypes = [
+    try {
+
+        const data =
+            await api(
+                "/api/profile",
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        name
+                    })
+                }
+            );
+
+        currentUser = {
+            ...currentUser,
+            ...data.user
+        };
+
+        updateProfileUI();
+        await loadContacts();
+
+        document.getElementById("profileMessage")
+            .textContent =
+            "Profile updated.";
+
+    } catch (error) {
+
+        document.getElementById("profileMessage")
+            .textContent =
+            error.message;
+    }
+}
+
+
+async function uploadProfilePhoto(file) {
+
+    if (!file) return;
+
+    if (![
         "image/jpeg",
         "image/png",
         "image/gif",
         "image/webp"
-    ];
+    ].includes(file.type)) {
 
-    if (
-        !allowedTypes.includes(
-            file.type
-        )
-    ) {
-
-        alert(
+        showNotification(
             "Please select a JPG, PNG, GIF or WEBP image."
         );
 
         return;
     }
 
-    if (
-        file.size >
-        10 * 1024 * 1024
-    ) {
+    if (file.size > 10 * 1024 * 1024) {
 
-        alert(
+        showNotification(
             "Profile photo must be smaller than 10MB."
         );
 
@@ -682,8 +1758,8 @@ async function uploadProfilePhoto(
                 "/api/profile/photo",
                 {
                     method: "POST",
-                    body: formData,
-                    credentials: "same-origin"
+                    credentials: "same-origin",
+                    body: formData
                 }
             );
 
@@ -691,63 +1767,35 @@ async function uploadProfilePhoto(
             await response.json();
 
         if (!response.ok) {
-
             throw new Error(
                 data.message ||
-                "Upload failed."
+                "Photo upload failed."
             );
         }
 
-        if (
-            data.user
-        ) {
-
-            currentUser =
-                data.user;
-
-        } else if (
-            data.avatar_url
-        ) {
-
-            currentUser.avatar_url =
-                data.avatar_url;
-        }
+        currentUser = {
+            ...currentUser,
+            ...data.user
+        };
 
         updateProfileUI();
 
         await loadContacts();
 
-        alert(
-            "Profile photo updated!"
+        showNotification(
+            "Profile photo updated."
         );
 
     } catch (error) {
 
         console.error(
-            "uploadProfilePhoto:",
+            "PROFILE PHOTO:",
             error
         );
 
-        alert(
+        showNotification(
             error.message
         );
-    }
-}
-
-
-// =========================================================
-// FILE INPUT
-// =========================================================
-
-function chooseProfilePhoto() {
-
-    const input =
-        document.getElementById(
-            "profilePhotoInput"
-        );
-
-    if (input) {
-        input.click();
     }
 }
 
@@ -767,54 +1815,21 @@ async function logout() {
             }
         );
 
-        window.location.reload();
-
     } catch (error) {
 
-        console.error(
-            "logout:",
-            error
-        );
-
-        alert(
-            "Logout failed."
-        );
+        console.error("LOGOUT:", error);
     }
+
+    if (socket) {
+        socket.disconnect();
+    }
+
+    window.location.reload();
 }
 
 
 // =========================================================
-// HTML ESCAPE
-// =========================================================
-
-function escapeHtml(value) {
-
-    return String(value ?? "")
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-}
-
-
-// =========================================================
-// SEARCH CONTACTS
+// SEARCH
 // =========================================================
 
 function searchContacts(query) {
@@ -824,52 +1839,195 @@ function searchContacts(query) {
         .toLowerCase()
         .trim();
 
-    const items =
-        document.querySelectorAll(
-            "#contactsList .contact-item"
-        );
+    document
+        .querySelectorAll(
+            "#contacts .contact-item"
+        )
+        .forEach(item => {
 
-    items.forEach(item => {
-
-        const content =
-            item.textContent
-            .toLowerCase();
-
-        item.style.display =
-            !text ||
-            content.includes(text)
-                ? ""
-                : "none";
-    });
+            item.style.display =
+                !text ||
+                item.textContent
+                    .toLowerCase()
+                    .includes(text)
+                    ? ""
+                    : "none";
+        });
 }
 
 
 // =========================================================
-// INITIALIZE
+// HELPERS
+// =========================================================
+
+function formatTime(value) {
+
+    if (!value) return "";
+
+    const date =
+        new Date(
+            String(value).replace(" ", "T")
+        );
+
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+
+    return date.toLocaleTimeString(
+        [],
+        {
+            hour: "2-digit",
+            minute: "2-digit"
+        }
+    );
+}
+
+
+function scrollMessagesToBottom() {
+
+    const container =
+        document.getElementById("messages");
+
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+
+        container.scrollTop =
+            container.scrollHeight;
+
+    });
+}
+
+
+function updateChatStatus() {
+
+    if (!selectedContactId) return;
+
+    const contact =
+        contacts.find(
+            c => Number(c.id) === Number(selectedContactId)
+        );
+
+    if (!contact) return;
+
+    document.getElementById("chatStatus")
+        .textContent =
+        contact.online ? "Online" : "Offline";
+}
+
+
+function showNotification(message) {
+
+    const notification =
+        document.getElementById("notification");
+
+    const text =
+        document.getElementById("notificationText");
+
+    if (!notification || !text) return;
+
+    text.textContent = message;
+
+    notification.style.display = "block";
+
+    clearTimeout(
+        window.myChatNotificationTimer
+    );
+
+    window.myChatNotificationTimer =
+        setTimeout(() => {
+
+            notification.style.display = "none";
+
+        }, 2500);
+}
+
+
+// =========================================================
+// EVENTS
 // =========================================================
 
 document.addEventListener(
     "DOMContentLoaded",
     async () => {
 
+        // ---------------------------------------------
+        // Check login
+        // ---------------------------------------------
+
         const loggedIn =
             await loadCurrentUser();
 
-        if (!loggedIn) {
-            return;
+        if (loggedIn) {
+            await startChatApp();
         }
 
-        await loadContacts();
 
-        // Profile photo input
-        const photoInput =
-            document.getElementById(
-                "profilePhotoInput"
+        // ---------------------------------------------
+        // Send
+        // ---------------------------------------------
+
+        document
+            .getElementById("sendBtn")
+            .addEventListener(
+                "click",
+                sendCurrentMessage
             );
 
-        if (photoInput) {
 
-            photoInput.addEventListener(
+        // ---------------------------------------------
+        // Enter key
+        // ---------------------------------------------
+
+        document
+            .getElementById("messageInput")
+            .addEventListener(
+                "keydown",
+                event => {
+
+                    if (
+                        event.key === "Enter" &&
+                        !event.shiftKey
+                    ) {
+
+                        event.preventDefault();
+                        sendCurrentMessage();
+                    }
+                }
+            );
+
+
+        // ---------------------------------------------
+        // Typing
+        // ---------------------------------------------
+
+        document
+            .getElementById("messageInput")
+            .addEventListener(
+                "input",
+                handleTyping
+            );
+
+
+        // ---------------------------------------------
+        // File
+        // ---------------------------------------------
+
+        document
+            .getElementById("fileBtn")
+            .addEventListener(
+                "click",
+                () => {
+                    document
+                        .getElementById("fileInput")
+                        .click();
+                }
+            );
+
+
+        document
+            .getElementById("fileInput")
+            .addEventListener(
                 "change",
                 event => {
 
@@ -877,64 +2035,207 @@ document.addEventListener(
                         event.target.files[0];
 
                     if (file) {
-                        uploadProfilePhoto(
-                            file
-                        );
+                        uploadChatFile(file);
                     }
 
                     event.target.value = "";
                 }
             );
-        }
 
+
+        // ---------------------------------------------
         // Search
-        const searchInput =
-            document.getElementById(
-                "contactSearch"
-            );
+        // ---------------------------------------------
 
-        if (searchInput) {
-
-            searchInput.addEventListener(
+        document
+            .getElementById("searchInput")
+            .addEventListener(
                 "input",
                 event => {
-
                     searchContacts(
                         event.target.value
                     );
                 }
             );
-        }
 
-        // Close modals when clicking outside
+
+        // ---------------------------------------------
+        // Add contact
+        // ---------------------------------------------
+
+        document
+            .getElementById("addContactBtn")
+            .addEventListener(
+                "click",
+                () => {
+
+                    document
+                        .getElementById("contactModal")
+                        .classList.add("show");
+
+                    document
+                        .getElementById("emailInput")
+                        .focus();
+                }
+            );
+
+
+        document
+            .getElementById("closeModal")
+            .addEventListener(
+                "click",
+                () => {
+
+                    document
+                        .getElementById("contactModal")
+                        .classList.remove("show");
+                }
+            );
+
+
+        document
+            .getElementById("confirmContact")
+            .addEventListener(
+                "click",
+                async () => {
+
+                    const email =
+                        document
+                            .getElementById("emailInput")
+                            .value
+                            .trim();
+
+                    if (!email) return;
+
+                    const message =
+                        document
+                            .getElementById("contactMessage");
+
+                    try {
+
+                        await addContact(email);
+
+                        message.textContent =
+                            "Contact added successfully.";
+
+                        document
+                            .getElementById("emailInput")
+                            .value = "";
+
+                    } catch (error) {
+
+                        message.textContent =
+                            error.message;
+                    }
+                }
+            );
+
+
+        // ---------------------------------------------
+        // Profile
+        // ---------------------------------------------
+
+        document
+            .getElementById("profileBtn")
+            .addEventListener(
+                "click",
+                openProfileModal
+            );
+
+
+        document
+            .getElementById("closeProfileModal")
+            .addEventListener(
+                "click",
+                closeProfileModal
+            );
+
+
+        document
+            .getElementById("saveProfileBtn")
+            .addEventListener(
+                "click",
+                saveProfile
+            );
+
+
+        document
+            .getElementById("profilePhotoInput")
+            .addEventListener(
+                "change",
+                event => {
+
+                    const file =
+                        event.target.files[0];
+
+                    if (file) {
+                        uploadProfilePhoto(file);
+                    }
+
+                    event.target.value = "";
+                }
+            );
+
+
+        // ---------------------------------------------
+        // Groups
+        // ---------------------------------------------
+
+        document
+            .getElementById("newGroupBtn")
+            .addEventListener(
+                "click",
+                openNewGroupModal
+            );
+
+
+        document
+            .getElementById("closeGroupModal")
+            .addEventListener(
+                "click",
+                closeNewGroupModal
+            );
+
+
+        document
+            .getElementById("createGroupBtn")
+            .addEventListener(
+                "click",
+                createGroup
+            );
+
+
+        // ---------------------------------------------
+        // Close modal outside
+        // ---------------------------------------------
+
         document.addEventListener(
             "click",
             event => {
 
-                const groupModal =
-                    document.getElementById(
-                        "newGroupModal"
-                    );
+                const contactModal =
+                    document.getElementById("contactModal");
 
                 const profileModal =
-                    document.getElementById(
-                        "profileModal"
-                    );
+                    document.getElementById("profileModal");
 
-                if (
-                    event.target ===
-                    groupModal
-                ) {
-                    closeNewGroupModal();
+                const groupModal =
+                    document.getElementById("groupModal");
+
+                if (event.target === contactModal) {
+                    contactModal.classList.remove("show");
                 }
 
-                if (
-                    event.target ===
-                    profileModal
-                ) {
-                    closeProfileModal();
+                if (event.target === profileModal) {
+                    profileModal.classList.remove("show");
+                }
+
+                if (event.target === groupModal) {
+                    groupModal.classList.remove("show");
                 }
             }
         );
+
     }
 );
+```
